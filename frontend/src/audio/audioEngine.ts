@@ -306,7 +306,7 @@ export class SA11AudioEngine {
     this.monitorGain.connect(this.ctx.destination);
   }
 
-  public analyzeLivePitch(octaveShift = 0): PitchReading {
+  public analyzeLivePitch(octaveShift = 0, tuningCents = 0): PitchReading {
     if (!this.filteredAnalyser || !this.ctx) {
       return { freqHz: null, key: null, cents: null, rmsDb: -96, confidence: 0 };
     }
@@ -327,8 +327,8 @@ export class SA11AudioEngine {
       return { freqHz: null, key: null, cents: null, rmsDb, confidence };
     }
 
-    // Normalize detected frequency into F3–C6 key index using current octaveShift
-    const adjustedFreq = freq / Math.pow(2, octaveShift);
+    // Normalize detected frequency into F3–C6 key index using current octaveShift & fine-tuning cents
+    const adjustedFreq = freq / (Math.pow(2, octaveShift) * Math.pow(2, tuningCents / 1200));
     const match = findClosestSA11Key(adjustedFreq);
     return {
       freqHz: freq,

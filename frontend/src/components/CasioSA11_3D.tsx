@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { SA11_KEYS, SA11_TONES, SA11Key } from '../data/sa11Data';
-import { Eye, RotateCcw, Volume2 } from 'lucide-react';
+import { Crosshair, Eye, RotateCcw, Volume2 } from 'lucide-react';
 
 interface CasioSA11_3DProps {
   activeMidiNotes: number[];       // Notes currently pressed (real keyboard audio OR virtual click) -> RED!
@@ -13,7 +13,10 @@ interface CasioSA11_3DProps {
   detectedCents: number | null;
   isLineInConnected: boolean;
   octaveShift: number;
+  tuningCents: number;
+  isCalibrating: boolean;
   onOctaveShiftChange: (shift: number) => void;
+  onStartCalibration: () => void;
   onVirtualKeyPress: (key: SA11Key) => void;
   onVirtualKeyRelease: (key: SA11Key) => void;
   onToneDigitClick?: (digit: number) => void;
@@ -121,7 +124,10 @@ export const CasioSA11_3D: React.FC<CasioSA11_3DProps> = ({
   detectedCents,
   isLineInConnected,
   octaveShift,
+  tuningCents,
+  isCalibrating,
   onOctaveShiftChange,
+  onStartCalibration,
   onVirtualKeyPress,
   onVirtualKeyRelease,
 }) => {
@@ -562,6 +568,22 @@ export const CasioSA11_3D: React.FC<CasioSA11_3DProps> = ({
             <option value={0}>Oktav: Normal (F3–C6)</option>
             <option value={1}>Oktav: +1 (F4–C7)</option>
           </select>
+          <button
+            className={`btn btn-sm ${isCalibrating ? 'btn-danger' : ''}`}
+            disabled={!isLineInConnected}
+            title={
+              isLineInConnected
+                ? 'Klavyenizdeki en sol beyaz tuşa (Fa) basarak oktav ve akordu otomatik eşleştirin'
+                : 'Önce Line-In bağlantısını başlatın'
+            }
+            onClick={onStartCalibration}
+          >
+            <Crosshair size={13} />
+            {isCalibrating ? 'En Sol Tuşa (Fa) Basın...' : 'Otomatik Kalibre Et'}
+          </button>
+          {tuningCents !== 0 && (
+            <span className="chip accent mono">Akort: {tuningCents > 0 ? `+${tuningCents}` : tuningCents}c</span>
+          )}
           <span className={`chip ${isLineInConnected ? 'ok' : ''}`}>
             {isLineInConnected ? 'Line-In Aktif' : 'Sanal / Tıklanabilir Mod'}
           </span>

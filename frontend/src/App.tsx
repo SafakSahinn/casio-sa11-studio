@@ -24,6 +24,8 @@ export function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('education');
   const [selectedToneCode, setSelectedToneCode] = useState<string>('00');
   const [octaveShift, setOctaveShift] = useState<number>(0);
+  const [tuningCents, setTuningCents] = useState<number>(0);
+  const [isCalibrating, setIsCalibrating] = useState<boolean>(false);
 
   // Audio / Line-In state
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
@@ -119,9 +121,26 @@ export function App() {
       return;
     }
     const timer = window.setInterval(() => {
-      const reading = audioEngine.analyzeLivePitch(octaveShift);
+      const reading = audioEngine.analyzeLivePitch(octaveShift, tuningCents);
       const pct = Math.max(0, Math.min(100, ((reading.rmsDb + 60) / 60) * 100));
       setRmsLevelPct(pct);
+
+      // Automatic device calibration: user presses leftmost white key (F) on their connected keyboard
+      if (isCalibrating && reading.freqHz && reading.confidence >= 0.8) {
+        const f3 = 174.6141; // Standard F3 (MIDI 53)
+        const ratio = reading.freqHz / f3;
+        const oct = Math.max(-1, Math.min(1, Math.round(Math.log2(ratio))));
+        const expectedF = f3 * Math.pow(2, oct);
+        const centsOffset = Math.max(-80, Math.min(80, Math.round(1200 * Math.log2(reading.freqHz / expectedF))));
+        setOctaveShift(oct);
+        setTuningCents(centsOffset);
+        setIsCalibrating(false);
+        setDetectedMidi(53);
+        setDetectedNoteLabel(`Kalibre: F${3 + oct}`);
+        setDetectedFreqHz(reading.freqHz);
+        setDetectedCents(centsOffset);
+        return;
+      }
 
       if (reading.key && reading.freqHz) {
         setDetectedMidi(reading.key.midi);
@@ -139,7 +158,7 @@ export function App() {
     }, 33);
 
     return () => window.clearInterval(timer);
-  }, [isLineInConnected, octaveShift]);
+  }, [isLineInConnected, octaveShift, tuningCents, isCalibrating]);
 
   // Advance Education exercise automatically when user hits the target note (via real SA-11 OR 3D click!)
   const combinedActiveMidis = useMemo(() => {
@@ -358,7 +377,13 @@ export function App() {
             detectedCents={detectedCents}
             isLineInConnected={isLineInConnected}
             octaveShift={octaveShift}
-            onOctaveShiftChange={setOctaveShift}
+            tuningCents={tuningCents}
+            isCalibrating={isCalibrating}
+            onOctaveShiftChange={(s) => {
+              setOctaveShift(s);
+              setTuningCents(0);
+            }}
+            onStartCalibration={() => setIsCalibrating((prev) => !prev)}
             onVirtualKeyPress={handleVirtualKeyPress}
             onVirtualKeyRelease={handleVirtualKeyRelease}
           />
