@@ -7,10 +7,11 @@ import {
   SA11_KEYS,
   SA11_TONES,
   SA11Tone,
+  SongGenre,
   ToneCategory,
 } from '../data/sa11Data';
 import { audioEngine } from '../audio/audioEngine';
-import { Award, BookOpen, CheckCircle2, Music, Play, RotateCcw, Search, Sparkles, Square } from 'lucide-react';
+import { Award, BookOpen, CheckCircle2, Gauge, Music, Play, RotateCcw, Search, Sparkles, Square, Trophy } from 'lucide-react';
 
 interface EducationPanelProps {
   selectedToneCode: string;
@@ -58,6 +59,10 @@ export const EducationPanel: React.FC<EducationPanelProps> = ({
   const [subTab, setSubTab] = useState<'theory' | 'songs' | 'tones'>('theory');
   const [selectedLesson, setSelectedLesson] = useState<MusicLesson>(MUSIC_LESSONS[0]);
   const [selectedSong, setSelectedSong] = useState<FamousSong>(FAMOUS_SONGS[0]);
+  const [songGenre, setSongGenre] = useState<'Tümü' | SongGenre>('Tümü');
+  const [songDiff, setSongDiff] = useState<'Tümü' | 'Kolay' | 'Orta' | 'İleri'>('Tümü');
+  const [songSearch, setSongSearch] = useState('');
+  const [previewSpeed, setPreviewSpeed] = useState<number>(1.0);
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState<'Tümü' | ToneCategory>('Tümü');
   const [isPreviewing, setIsPreviewing] = useState(false);
@@ -67,6 +72,30 @@ export const EducationPanel: React.FC<EducationPanelProps> = ({
     () => SA11_TONES.find((t) => t.code === selectedToneCode) ?? SA11_TONES[0],
     [selectedToneCode]
   );
+
+  const completedLessonsCount = useMemo(
+    () => MUSIC_LESSONS.filter((l) => (progressMap[l.id] ?? 0) >= l.targetMidiSequence.length).length,
+    [progressMap]
+  );
+
+  const completedSongsCount = useMemo(
+    () => FAMOUS_SONGS.filter((s) => (progressMap[s.id] ?? 0) >= s.midiSequence.length).length,
+    [progressMap]
+  );
+
+  const filteredSongs = useMemo(() => {
+    const q = songSearch.trim().toLowerCase();
+    return FAMOUS_SONGS.filter((s) => {
+      if (songGenre !== 'Tümü' && s.genre !== songGenre) return false;
+      if (songDiff !== 'Tümü' && s.difficulty !== songDiff) return false;
+      if (!q) return true;
+      return (
+        s.title.toLowerCase().includes(q) ||
+        s.composer.toLowerCase().includes(q) ||
+        s.genre.toLowerCase().includes(q)
+      );
+    });
+  }, [songGenre, songDiff, songSearch]);
 
   const filteredTones = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -100,7 +129,8 @@ export const EducationPanel: React.FC<EducationPanelProps> = ({
   const playSequencePreview = (seq: number[], tone: SA11Tone, bpm = 110) => {
     stopPreview();
     setIsPreviewing(true);
-    const stepMs = Math.round((60 / bpm) * 1000 * 0.72);
+    const effectiveBpm = Math.max(40, bpm * previewSpeed);
+    const stepMs = Math.round((60 / effectiveBpm) * 1000 * 0.72);
     const noteMs = Math.max(160, Math.round(stepMs * 0.82));
 
     seq.forEach((midi, idx) => {
@@ -153,23 +183,39 @@ export const EducationPanel: React.FC<EducationPanelProps> = ({
           </button>
         </div>
 
-        {activeSeq && (
-          <div className="chip accent">
-            <Sparkles size={13} />
-            <span>
-              Aktif Pratik: <strong>{activePracticeLabel}</strong>
-              {' '}({Math.min(lessonStepIndex, activeSeq.length)}/{activeSeq.length})
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <div className="chip ok">
+            <Trophy size={13} />
+            <span className="mono">
+              {completedLessonsCount}/{MUSIC_LESSONS.length} Ders · {completedSongsCount}/{FAMOUS_SONGS.length} Eser
             </span>
-            <button
-              className="btn btn-sm"
-              style={{ marginLeft: 6, padding: '2px 7px' }}
-              onClick={onResetLessonStep}
-              title="Baştan Başla"
-            >
-              <RotateCcw size={12} />
-            </button>
           </div>
-        )}
+          {activeSeq && (
+            <div className="chip accent">
+              <Sparkles size={13} />
+              <span>
+                Aktif: <strong>{activePracticeLabel}</strong>{' '}
+                ({Math.min(lessonStepIndex, activeSeq.length)}/{activeSeq.length})
+              </span>
+              {lessonStepIndex < activeSeq.length && (() => {
+                const nextKey = SA11_KEYS.find((k) => k.midi === activeSeq[lessonStepIndex]);
+                return nextKey ? (
+                  <span className="mono" style={{ marginLeft: 4, fontWeight: 800 }}>
+                    → Sıradaki: {nextKey.note} ({nextKey.solfege.replace(/\d/, '')})
+                  </span>
+                ) : null;
+              })()}
+              <button
+                className="btn btn-sm"
+                style={{ marginLeft: 6, padding: '2px 7px' }}
+                onClick={onResetLessonStep}
+                title="Baştan Başla"
+              >
+                <RotateCcw size={12} />
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* TAB 1: Basic Music Theory Curriculum */}
@@ -343,17 +389,55 @@ export const EducationPanel: React.FC<EducationPanelProps> = ({
       {/* TAB 2: Famous Piano Songs Repertoire */}
       {subTab === 'songs' && (
         <div className="grid-asymmetric">
-          {/* Left: Famous Composers & Songs List */}
-          <div className="card" style={{ padding: 14 }}>
-            <div className="card-header" style={{ marginBottom: 10 }}>
-              <span className="card-title">Klasik & Meşhur Eserler</span>
-              <span className="chip ok">{FAMOUS_SONGS.length} Eser</span>
+          {/* Left: Famous Composers & Songs List with Genre/Difficulty Filter */}
+          <div className="card" style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div className="card-header" style={{ marginBottom: 0 }}>
+              <span className="card-title">Repertuvar ({filteredSongs.length}/{FAMOUS_SONGS.length})</span>
+              <span className="chip ok">{completedSongsCount} Tamamlandı</span>
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 490, overflowY: 'auto' }}>
-              {FAMOUS_SONGS.map((song) => {
+
+            <div style={{ position: 'relative' }}>
+              <Search size={13} style={{ position: 'absolute', left: 9, top: 10, color: 'var(--muted)' }} />
+              <input
+                className="input"
+                style={{ paddingLeft: 28, fontSize: 12.5 }}
+                placeholder="Eser veya besteci ara..."
+                value={songSearch}
+                onChange={(e) => setSongSearch(e.target.value)}
+              />
+            </div>
+
+            <div style={{ display: 'flex', gap: 6 }}>
+              <select
+                className="select"
+                style={{ fontSize: 12, padding: '5px 8px' }}
+                value={songGenre}
+                onChange={(e) => setSongGenre(e.target.value as 'Tümü' | SongGenre)}
+              >
+                <option value="Tümü">Tüm Türler</option>
+                <option value="Klasik">Klasik (12)</option>
+                <option value="Film & Dizi">Film & Dizi (4)</option>
+                <option value="Türk Müziği">Türk Müziği (4)</option>
+              </select>
+              <select
+                className="select"
+                style={{ fontSize: 12, padding: '5px 8px', width: 110 }}
+                value={songDiff}
+                onChange={(e) => setSongDiff(e.target.value as 'Tümü' | 'Kolay' | 'Orta' | 'İleri')}
+              >
+                <option value="Tümü">Seviye</option>
+                <option value="Kolay">Kolay</option>
+                <option value="Orta">Orta</option>
+                <option value="İleri">İleri</option>
+              </select>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 440, overflowY: 'auto' }}>
+              {filteredSongs.map((song) => {
                 const isSel = selectedSong.id === song.id;
                 const isPrac = activePracticeKey === song.id;
                 const savedStep = progressMap[song.id] ?? 0;
+                const isFinished = savedStep >= song.midiSequence.length;
                 return (
                   <div
                     key={song.id}
@@ -370,15 +454,20 @@ export const EducationPanel: React.FC<EducationPanelProps> = ({
                       cursor: 'pointer',
                     }}
                   >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
-                      <span className={`chip ${song.difficulty === 'Kolay' ? 'ok' : song.difficulty === 'Orta' ? 'accent' : 'warn'}`}>
-                        {song.difficulty}
-                      </span>
-                      <span className="mono" style={{ fontSize: 11, color: isPrac ? 'var(--danger)' : savedStep > 0 ? 'var(--ok)' : 'var(--muted)' }}>
-                        {isPrac
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3, gap: 4 }}>
+                      <div style={{ display: 'flex', gap: 4 }}>
+                        <span className={`chip ${song.difficulty === 'Kolay' ? 'ok' : song.difficulty === 'Orta' ? 'accent' : 'warn'}`}>
+                          {song.difficulty}
+                        </span>
+                        <span className="chip" style={{ fontSize: 10.5 }}>{song.genre}</span>
+                      </div>
+                      <span className="mono" style={{ fontSize: 11, color: isFinished ? 'var(--ok)' : isPrac ? 'var(--danger)' : savedStep > 0 ? 'var(--ok)' : 'var(--muted)' }}>
+                        {isFinished
+                          ? '✓ Bitti'
+                          : isPrac
                           ? `Pratik (${savedStep}/${song.midiSequence.length})`
                           : savedStep > 0
-                          ? `Kaldığı Yer: ${savedStep}/${song.midiSequence.length}`
+                          ? `${savedStep}/${song.midiSequence.length}`
                           : `${song.bpm} BPM`}
                       </span>
                     </div>
@@ -395,6 +484,7 @@ export const EducationPanel: React.FC<EducationPanelProps> = ({
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
                 <span className="chip accent">{selectedSong.composer}</span>
+                <span className="chip ok">{selectedSong.genre}</span>
                 <span className="chip">{selectedSong.era}</span>
                 <span className="chip mono">Ton #{selectedSong.recommendedToneCode}</span>
                 <span className="chip mono">{selectedSong.bpm} BPM</span>
@@ -415,7 +505,28 @@ export const EducationPanel: React.FC<EducationPanelProps> = ({
                     Pratiği başlattığınızda sıradaki tuş 3D klavyede mavi yanar; doğru tuşa bastığınızda kırmızıya dönüp ilerler.
                   </div>
                 </div>
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: 'var(--side)', padding: '3px 7px', borderRadius: 7, border: '1px solid var(--border)' }}>
+                    <Gauge size={13} color="var(--muted)" />
+                    {[0.5, 0.75, 1.0].map((sp) => (
+                      <button
+                        key={sp}
+                        onClick={() => setPreviewSpeed(sp)}
+                        style={{
+                          border: 'none',
+                          borderRadius: 5,
+                          padding: '2px 6px',
+                          fontSize: 11,
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          background: previewSpeed === sp ? 'var(--accent)' : 'transparent',
+                          color: previewSpeed === sp ? '#fff' : 'var(--text)',
+                        }}
+                      >
+                        %{Math.round(sp * 100)}
+                      </button>
+                    ))}
+                  </div>
                   {isPreviewing ? (
                     <button className="btn btn-sm btn-danger" onClick={stopPreview}>
                       <Square size={13} /> Durdur
