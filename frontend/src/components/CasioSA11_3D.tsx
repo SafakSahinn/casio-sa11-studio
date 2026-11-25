@@ -586,7 +586,13 @@ export const CasioSA11_3D: React.FC<CasioSA11_3DProps> = ({
               : 'Otomatik Kalibre Et'}
           </button>
           {tuningCents !== 0 && (
-            <span className="chip accent mono">Akort: {tuningCents > 0 ? `+${tuningCents}` : tuningCents}c</span>
+            <button
+              className="btn btn-sm"
+              title="Kalibrasyonu sıfırla"
+              onClick={() => onOctaveShiftChange(0)}
+            >
+              Akort: {tuningCents > 0 ? `+${tuningCents}` : tuningCents}c ✕
+            </button>
           )}
           <span className={`chip ${isLineInConnected ? 'ok' : ''}`}>
             {isLineInConnected ? 'Line-In Aktif' : 'Sanal / Tıklanabilir Mod'}

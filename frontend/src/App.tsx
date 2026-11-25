@@ -59,6 +59,7 @@ export function App() {
   const [takes, setTakes] = useState<RecordedTake[]>([]);
 
   const lastMatchedNoteRef = useRef<number | null>(null);
+  const stablePitchRef = useRef<{ midi: number | null; count: number }>({ midi: null, count: 0 });
   const selectedTone = useMemo(
     () => SA11_TONES.find((t) => t.code === selectedToneCode) ?? SA11_TONES[0],
     [selectedToneCode]
@@ -163,17 +164,27 @@ export function App() {
         return;
       }
 
-      if (reading.key && reading.freqHz) {
-        setDetectedMidi(reading.key.midi);
-        setDetectedNoteLabel(`${reading.key.note} (${reading.key.solfege.replace(/\d/, '')})`);
-        setDetectedFreqHz(reading.freqHz);
-        setDetectedCents(reading.cents);
-      } else if (reading.freqHz) {
+      if (reading.key && reading.freqHz && reading.confidence >= 0.8) {
+        // Require 2 consecutive matching frames to eliminate single-frame transient flickers
+        if (stablePitchRef.current.midi === reading.key.midi) {
+          stablePitchRef.current.count += 1;
+        } else {
+          stablePitchRef.current = { midi: reading.key.midi, count: 1 };
+        }
+        if (stablePitchRef.current.count >= 2) {
+          setDetectedMidi(reading.key.midi);
+          setDetectedNoteLabel(`${reading.key.note} (${reading.key.solfege.replace(/\d/, '')})`);
+          setDetectedFreqHz(reading.freqHz);
+          setDetectedCents(reading.cents);
+        }
+      } else if (reading.freqHz && reading.confidence >= 0.8) {
+        stablePitchRef.current = { midi: null, count: 0 };
         setDetectedMidi(null);
         setDetectedNoteLabel('Aralık Dışı');
         setDetectedFreqHz(reading.freqHz);
         setDetectedCents(null);
       } else {
+        stablePitchRef.current = { midi: null, count: 0 };
         setDetectedMidi(null);
       }
     }, 33);

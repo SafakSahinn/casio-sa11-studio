@@ -27,7 +27,7 @@ export interface LiveFilterConfig {
 export function detectPitchYIN(
   buffer: Float32Array,
   sampleRate: number,
-  threshold = 0.11
+  threshold = 0.12
 ): { freq: number | null; confidence: number } {
   const halfLen = Math.floor(buffer.length / 2);
   // Wide range covering F2 (87 Hz) to C7 (2093 Hz) with margin
@@ -48,6 +48,7 @@ export function detectPitchYIN(
     yin[tau] = runningSum > 0 ? (diff * tau) / runningSum : 1;
   }
 
+  // Standard YIN: pick the FIRST local minimum below threshold (true fundamental period T, never 2T)
   let tauEstimate = -1;
   for (let tau = minTau; tau <= maxTau; tau++) {
     if (yin[tau] < threshold) {
@@ -59,31 +60,8 @@ export function detectPitchYIN(
     }
   }
 
-  // Fallback: if nothing crossed strict threshold, check global min under 0.18
-  if (tauEstimate === -1) {
-    let bestVal = 0.18;
-    for (let tau = minTau; tau <= maxTau; tau++) {
-      if (yin[tau] < bestVal) {
-        bestVal = yin[tau];
-        tauEstimate = tau;
-      }
-    }
-  }
-
   if (tauEstimate === -1) {
     return { freq: null, confidence: 0 };
-  }
-
-  // Subharmonic check: prevent locking onto 2nd harmonic (1 octave too high)
-  const doubleTau = tauEstimate * 2;
-  if (doubleTau + 2 <= maxTau) {
-    let bestSub = doubleTau;
-    for (let t = Math.max(minTau, doubleTau - 2); t <= Math.min(maxTau, doubleTau + 2); t++) {
-      if (yin[t] < yin[bestSub]) bestSub = t;
-    }
-    if (yin[bestSub] < 0.18 && yin[bestSub] <= yin[tauEstimate] + 0.06) {
-      tauEstimate = bestSub;
-    }
   }
 
   // Parabolic interpolation for sub-sample accuracy
@@ -151,14 +129,14 @@ export class SA11AudioEngine {
 
   private isRecording = false;
   private recordedChunks: Float32Array[] = [];
-  private timeBuf = new Float32Array(2048);
+  private timeBuf = new Float32Array(4096);
 
   private filterConfig: LiveFilterConfig = {
     enabled: true,
     notch50Hz: true,
     sos: null,
     monitorOutput: false,
-    gateThresholdDb: -42,
+    gateThresholdDb: -38,
   };
 
   public ensureContext(): AudioContext {
@@ -210,7 +188,7 @@ export class SA11AudioEngine {
     this.rawAnalyser.smoothingTimeConstant = 0.72;
 
     this.filteredAnalyser = ctx.createAnalyser();
-    this.filteredAnalyser.fftSize = 2048;
+    this.filteredAnalyser.fftSize = 4096;
     this.filteredAnalyser.smoothingTimeConstant = 0.72;
 
     this.monitorGain = ctx.createGain();
@@ -281,36 +259,20 @@ export class SA11AudioEngine {
         this.filterNodes.push(notch);
       }
 
-      // Python-computed SOS (Second-Order Sections) via native Web Audio IIRFilterNode!
-      if (this.filterConfig.sos && this.filterConfig.sos.length > 0) {
-        for (const sec of this.filterConfig.sos) {
-          // sec = [b0, b1, b2, a0, a1, a2]
-          const ff = [sec[0], sec[1], sec[2]];
-          const fb = [sec[3], sec[4], sec[5]];
-          try {
-            const iir = this.ctx.createIIRFilter(ff, fb);
-            tail.connect(iir);
-            tail = iir;
-            this.filterNodes.push(iir);
-          } catch {
-            // Skip unstable section if sample rate mismatch
-          }
-        }
-      } else {
-        // Fallback default SA-11 Band-Pass (145 Hz - 2400 Hz) if no custom SOS loaded yet
-        const hp = this.ctx.createBiquadFilter();
-        hp.type = 'highpass';
-        hp.frequency.value = 140;
-        hp.Q.value = 0.707;
-        const lp = this.ctx.createBiquadFilter();
-        lp.type = 'lowpass';
-        lp.frequency.value = 4500;
-        lp.Q.value = 0.707;
-        tail.connect(hp);
-        hp.connect(lp);
-        tail = lp;
-        this.filterNodes.push(hp, lp);
-      }
+      // Clean, sample-rate independent 2nd-order Butterworth HPF (80 Hz) + LPF (2200 Hz)
+      // Keeps fundamental pitch razor-sharp without IIR ringing or sample-rate mismatch
+      const hp = this.ctx.createBiquadFilter();
+      hp.type = 'highpass';
+      hp.frequency.value = 80;
+      hp.Q.value = 0.7071;
+      const lp = this.ctx.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.value = 2200;
+      lp.Q.value = 0.7071;
+      tail.connect(hp);
+      hp.connect(lp);
+      tail = lp;
+      this.filterNodes.push(hp, lp);
     }
 
     tail.connect(this.filteredAnalyser);
