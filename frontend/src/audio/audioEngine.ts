@@ -322,9 +322,21 @@ export class SA11AudioEngine {
   }
 
   public updateFilterConfig(partial: Partial<LiveFilterConfig>): void {
+    const needsRebuild =
+      partial.enabled !== undefined ||
+      partial.notch50Hz !== undefined ||
+      partial.sos !== undefined;
+
     this.filterConfig = { ...this.filterConfig, ...partial };
-    if (this.sourceNode) {
+
+    if (!this.sourceNode) return;
+
+    if (needsRebuild) {
       this.rebuildFilterGraph();
+    } else if (this.monitorGain && this.ctx) {
+      // Smooth gain update with zero audio clicks/crackles while dragging slider
+      const target = this.filterConfig.monitorOutput ? this.filterConfig.monitorGain : 0.0;
+      this.monitorGain.gain.setTargetAtTime(target, this.ctx.currentTime, 0.015);
     }
   }
 

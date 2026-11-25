@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   FAMOUS_SONGS,
   FamousSong,
@@ -79,6 +79,15 @@ export const EducationPanel: React.FC<EducationPanelProps> = ({
     setIsPreviewing(false);
     onPreviewNote(null);
   };
+
+  // Stop any active song preview cleanly if user switches tabs
+  useEffect(() => {
+    return () => {
+      previewTimersRef.current.forEach((id) => window.clearTimeout(id));
+      previewTimersRef.current = [];
+      onPreviewNote(null);
+    };
+  }, []);
 
   const playSequencePreview = (seq: number[], tone: SA11Tone, bpm = 110) => {
     stopPreview();

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { CasioSA11_3D } from './components/CasioSA11_3D';
 import { EducationPanel } from './components/EducationPanel';
 import { RecordedTake, RecordStudioPanel } from './components/RecordStudioPanel';
@@ -60,7 +60,6 @@ export function App() {
   const [takes, setTakes] = useState<RecordedTake[]>([]);
 
   const lastMatchedNoteRef = useRef<number | null>(null);
-  const stablePitchRef = useRef<{ midi: number | null; count: number }>({ midi: null, count: 0 });
   const selectedTone = useMemo(
     () => SA11_TONES.find((t) => t.code === selectedToneCode) ?? SA11_TONES[0],
     [selectedToneCode]
