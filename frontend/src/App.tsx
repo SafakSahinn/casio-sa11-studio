@@ -371,9 +371,21 @@ export function App() {
             <span className="dot ok" />
             <span>Ses İşleme: Aktif ({backendOnline ? 'Python' : 'Otomatik'})</span>
           </div>
-          <div className="status-pill">
+          <div
+            className="status-pill"
+            style={{ cursor: 'pointer' }}
+            title="3D klavyedeki 0–9 tuşlarından veya Eğitim > 100 Ton sekmesinden değiştirebilirsiniz"
+            onClick={() => setActiveTab('education')}
+          >
             <span className="dot accent" />
-            <span className="mono">Ton #{selectedTone.code} {selectedTone.name}</span>
+            <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.25 }}>
+              <span className="mono" style={{ fontWeight: 700, color: 'var(--text-h)' }}>
+                Ton #{selectedTone.code} · {selectedTone.name}
+              </span>
+              <span style={{ fontSize: 11, color: 'var(--muted)' }}>
+                Mod: {selectedTone.category}
+              </span>
+            </div>
           </div>
         </div>
       </aside>
