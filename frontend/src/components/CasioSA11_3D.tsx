@@ -105,7 +105,12 @@ function createTopPanelTexture(selectedToneCode: string): THREE.CanvasTexture {
   ctx.fillText('TEMPO', 795, 315);
   ctx.fillText('SELECT', 880, 315);
   ctx.fillText('STOP', 950, 315);
-  ctx.fillText('TONE SELECT (0 - 9)', 1170, 315);
+  ctx.fillText('TONE SELECT (0 - 9)', 1170, 304);
+  ctx.fillStyle = '#60a5fa';
+  ctx.font = '700 14px JetBrains Mono, monospace';
+  for (let d = 0; d < 10; d++) {
+    ctx.fillText(String(d), 1018 + d * 51, 326);
+  }
 
   // Subtle rhythm strip label above keys
   ctx.fillStyle = '#94a3b8';
@@ -164,6 +169,7 @@ export const CasioSA11_3D: React.FC<CasioSA11_3DProps> = ({
   onStartCalibration,
   onVirtualKeyPress,
   onVirtualKeyRelease,
+  onToneDigitClick,
 }) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const keyMeshesRef = useRef<Map<number, {
@@ -179,10 +185,10 @@ export const CasioSA11_3D: React.FC<CasioSA11_3DProps> = ({
   const activeNotesRef = useRef<Set<number>>(new Set());
   const targetNoteRef = useRef<number | null>(null);
   const pressedMouseMidiRef = useRef<number | null>(null);
-  const callbacksRef = useRef({ onVirtualKeyPress, onVirtualKeyRelease });
+  const callbacksRef = useRef({ onVirtualKeyPress, onVirtualKeyRelease, onToneDigitClick });
   const [camPreset, setCamPreset] = useState<CameraPreset>('iso');
 
-  callbacksRef.current = { onVirtualKeyPress, onVirtualKeyRelease };
+  callbacksRef.current = { onVirtualKeyPress, onVirtualKeyRelease, onToneDigitClick };
 
   // Keep refs synced for animation loop
   useEffect(() => {
@@ -368,7 +374,7 @@ export const CasioSA11_3D: React.FC<CasioSA11_3DProps> = ({
     const btnBlueMat = new THREE.MeshStandardMaterial({ color: '#3d5afe', roughness: 0.38 });
     const btnRedMat = new THREE.MeshStandardMaterial({ color: '#eb5757', roughness: 0.38 });
 
-    const buttonSpecs: Array<{ x: number; mat: THREE.Material }> = [
+    const buttonSpecs: Array<{ x: number; mat: THREE.Material; toneDigit?: number }> = [
       { x: -0.56, mat: btnGrayMat }, // VOL -
       { x: -0.45, mat: btnGrayMat }, // VOL +
       { x: -0.26, mat: btnRedMat },  // DEMO
@@ -377,14 +383,19 @@ export const CasioSA11_3D: React.FC<CasioSA11_3DProps> = ({
       { x: 0.22, mat: btnBlueMat },  // SELECT
       { x: 0.35, mat: btnGrayMat },  // STOP
     ];
-    // 10 Tone select buttons (0..9)
+    // 10 Clickable Tone select buttons (0..9)
+    const clickableToneBtns: THREE.Mesh[] = [];
     for (let d = 0; d < 10; d++) {
-      buttonSpecs.push({ x: 0.62 + d * 0.145, mat: btnGrayMat });
+      buttonSpecs.push({ x: 0.62 + d * 0.145, mat: btnGrayMat.clone(), toneDigit: d });
     }
     for (const b of buttonSpecs) {
       const btn = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.042, 0.16), b.mat);
       btn.position.set(b.x, 0.252, -0.12);
       btn.castShadow = true;
+      if (b.toneDigit !== undefined) {
+        btn.userData = { toneDigit: b.toneDigit };
+        clickableToneBtns.push(btn);
+      }
       keyboardGroup.add(btn);
     }
 
@@ -497,25 +508,41 @@ export const CasioSA11_3D: React.FC<CasioSA11_3DProps> = ({
     keyMeshesRef.current = keyMap;
     labelMeshesRef.current = createdLabels;
 
-    // Raycasting for clicking 3D keys
+    // Raycasting for clicking 3D keys & 3D TONE 0-9 buttons
     const raycaster = new THREE.Raycaster();
     const pointer = new THREE.Vector2();
+    const allInteractables: THREE.Mesh[] = [...clickableMeshes, ...clickableToneBtns];
 
-    const getHitMidi = (ev: PointerEvent): number | null => {
+    const getHitObject = (ev: PointerEvent): THREE.Mesh | null => {
       const rect = renderer.domElement.getBoundingClientRect();
       pointer.x = ((ev.clientX - rect.left) / rect.width) * 2 - 1;
       pointer.y = -((ev.clientY - rect.top) / rect.height) * 2 + 1;
       raycaster.setFromCamera(pointer, camera);
-      const hits = raycaster.intersectObjects(clickableMeshes, false);
-      if (hits.length > 0 && typeof hits[0].object.userData.midi === 'number') {
-        return hits[0].object.userData.midi as number;
-      }
-      return null;
+      const hits = raycaster.intersectObjects(allInteractables, false);
+      return hits.length > 0 ? (hits[0].object as THREE.Mesh) : null;
     };
 
     const onPointerDown = (ev: PointerEvent) => {
-      const midi = getHitMidi(ev);
-      if (midi !== null) {
+      const hit = getHitObject(ev);
+      if (!hit) return;
+
+      if (typeof hit.userData.toneDigit === 'number') {
+        const digit = hit.userData.toneDigit as number;
+        // Brief physical press + blue flash animation on clicked TONE digit button
+        const mat = hit.material as THREE.MeshStandardMaterial;
+        const origY = hit.position.y;
+        hit.position.y = origY - 0.015;
+        mat.color.set('#3d5afe');
+        window.setTimeout(() => {
+          hit.position.y = origY;
+          mat.color.set('#3b404c');
+        }, 160);
+        callbacksRef.current.onToneDigitClick?.(digit);
+        return;
+      }
+
+      if (typeof hit.userData.midi === 'number') {
+        const midi = hit.userData.midi as number;
         controls.enabled = false;
         pressedMouseMidiRef.current = midi;
         const found = SA11_KEYS.find((x) => x.midi === midi);

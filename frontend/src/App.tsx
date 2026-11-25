@@ -467,6 +467,14 @@ export function App() {
             }}
             onVirtualKeyPress={handleVirtualKeyPress}
             onVirtualKeyRelease={handleVirtualKeyRelease}
+            onToneDigitClick={(digit) => {
+              // Authentic Casio SA-11 2-digit shift-register tone selection (Manual p.1: e.g. 36 -> press 0 -> 60 -> press 6 -> 06)
+              const nextCode = `${selectedToneCode[1] ?? '0'}${digit}`;
+              setSelectedToneCode(nextCode);
+              // Authentic SA-11 button confirmation click (Tone 79 Typewriter)
+              const clickTone = SA11_TONES[79];
+              audioEngine.playShortNote(72, clickTone, 45);
+            }}
           />
 
           {/* Active Module */}
