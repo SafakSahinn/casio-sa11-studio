@@ -376,6 +376,7 @@ export function App() {
                 setLessonStepIndex(0);
               }}
               onResetLessonStep={() => setLessonStepIndex(0)}
+              onPreviewNote={(midi) => setSeqMidiNote(midi)}
             />
           )}
 

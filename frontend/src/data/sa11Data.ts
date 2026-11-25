@@ -391,3 +391,143 @@ export const MUSIC_LESSONS: MusicLesson[] = [
     targetMidiSequence: [60, 60, 67, 67, 69, 69, 67, 65, 65, 64, 64, 62, 62, 60],
   },
 ];
+
+// =========================================================================
+// Famous Piano Education Repertoire (All arranged for Casio SA-11: F3–C6)
+// =========================================================================
+
+export interface FamousSong {
+  id: string;
+  composer: string;
+  title: string;
+  era: string;
+  difficulty: 'Kolay' | 'Orta' | 'İleri';
+  bpm: number;
+  recommendedToneCode: string;
+  description: string;
+  tip: string;
+  midiSequence: number[];
+}
+
+export const FAMOUS_SONGS: FamousSong[] = [
+  {
+    id: 'beethoven-fur-elise',
+    composer: 'Ludwig van Beethoven',
+    title: 'Für Elise (Bagatelle No. 25)',
+    era: 'Klasik / Romantik',
+    difficulty: 'Kolay',
+    bpm: 112,
+    recommendedToneCode: '00',
+    description: 'Dünya genelinde piyano eğitiminde en çok öğretilen klasik başyapıt. Mi5–Re♯5 yarım ses salınımıyla tanınır.',
+    tip: 'E5–D♯5 geçişinde 4. ve 5. parmaklarınızı hafif ve eşit tempoda kullanın.',
+    midiSequence: [76, 75, 76, 75, 76, 71, 74, 72, 69, 60, 64, 69, 71, 64, 68, 71, 72],
+  },
+  {
+    id: 'beethoven-ode-to-joy',
+    composer: 'Ludwig van Beethoven',
+    title: 'Neşeye Övgü (9. Senfoni)',
+    era: 'Klasik',
+    difficulty: 'Kolay',
+    bpm: 118,
+    recommendedToneCode: '00',
+    description: 'Sadece 5 beyaz tuşla (C4–G4) çalınabilen, başlangıç piyano metodlarının vazgeçilmez teması.',
+    tip: 'Sağ elinizi C4–G4 üzerine yerleştirip elinizi kaydırmadan tüm melodiyi çalabilirsiniz.',
+    midiSequence: [64, 64, 65, 67, 67, 65, 64, 62, 60, 60, 62, 64, 64, 62, 62],
+  },
+  {
+    id: 'mozart-turkish-march',
+    composer: 'Wolfgang Amadeus Mozart',
+    title: 'Türk Marşı (Rondo Alla Turca)',
+    era: 'Klasik',
+    difficulty: 'İleri',
+    bpm: 132,
+    recommendedToneCode: '00',
+    description: 'Mehter ritimlerinden esinlenen, çevik parmak tekniği kazandıran efsanevi Mozart sonatı.',
+    tip: 'Önce yavaş tempoda B4–A4–G♯4–A4 dörtlü gruplarını netleştirip sonra hızlanın.',
+    midiSequence: [71, 69, 68, 69, 72, 74, 72, 71, 72, 76, 77, 76, 75, 76, 83, 81, 80, 81, 83, 81, 80, 81, 84],
+  },
+  {
+    id: 'mozart-eine-kleine',
+    composer: 'Wolfgang Amadeus Mozart',
+    title: 'Küçük Bir Gece Müziği (Eine Kleine Nachtmusik)',
+    era: 'Klasik',
+    difficulty: 'Orta',
+    bpm: 126,
+    recommendedToneCode: '30',
+    description: 'Canlı arpej sıçramalarıyla ritim duygusunu geliştiren en bilinen Mozart serenadı.',
+    tip: 'G4–D4 sıçramalarını kısa ve enerjik (staccato) çalın; Ton 30 Strings ile orkestra hissi verir.',
+    midiSequence: [67, 62, 67, 62, 67, 62, 67, 71, 74, 72, 69, 72, 69, 72, 69, 66, 69, 62],
+  },
+  {
+    id: 'bach-minuet-in-g',
+    composer: 'Johann Sebastian Bach',
+    title: 'Sol Majör Minuet (BWV Anh. 114)',
+    era: 'Barok',
+    difficulty: 'Orta',
+    bpm: 114,
+    recommendedToneCode: '03',
+    description: 'Anna Magdalena Bach Defteri’nden 3/4 vals ölçüsünde, tüm konservatuvarların temel piyano parçası.',
+    tip: 'Üçlü ölçü (1-2-3) hissini koruyun; Ton 03 Harpsichord (Klavsen) ile Barok tını yakalayabilirsiniz.',
+    midiSequence: [74, 67, 69, 71, 72, 74, 67, 67, 76, 72, 74, 76, 78, 79, 67, 67],
+  },
+  {
+    id: 'pachelbel-canon',
+    composer: 'Johann Pachelbel',
+    title: 'Canon in D (Piyano Düzenlemesi)',
+    era: 'Barok',
+    difficulty: 'Kolay',
+    bpm: 92,
+    recommendedToneCode: '00',
+    description: 'İnen bas yürüyüşü ve akıcı melodisiyle sakin, duygusal piyano çalışması için ideal eser.',
+    tip: 'Notaları birbirine bağlayarak (legato) yumuşak geçişlerle çalın.',
+    midiSequence: [76, 74, 72, 71, 69, 67, 69, 71, 72, 71, 69, 67, 65, 64, 65, 67],
+  },
+  {
+    id: 'chopin-nocturne',
+    composer: 'Frédéric Chopin',
+    title: 'Nocturne Op. 9 No. 2 (Ana Tema)',
+    era: 'Romantik',
+    difficulty: 'Orta',
+    bpm: 84,
+    recommendedToneCode: '00',
+    description: 'Romantik dönemin en zarif gece müziği. İfade gücü ve yumuşak tuş kontrolü kazandırır.',
+    tip: 'Acele etmeyin; uzun notalarda melodinin nefes almasına izin verin.',
+    midiSequence: [67, 76, 74, 76, 74, 72, 67, 72, 69, 67, 65, 64, 62, 64, 65, 67],
+  },
+  {
+    id: 'tchaikovsky-swan-lake',
+    composer: 'Pyotr Ilyich Tchaikovsky',
+    title: 'Kuğu Gölü (Swan Lake Ana Tema)',
+    era: 'Romantik',
+    difficulty: 'Orta',
+    bpm: 96,
+    recommendedToneCode: '32',
+    description: 'Dramatik minör tınısıyla ünlü bale teması. La Minör gamını pekiştirmek için mükemmeldir.',
+    tip: 'E5 notasını güçlü başlatıp A4–B4–C5–D5 yükselişini akıcı şekilde bağlayın.',
+    midiSequence: [76, 69, 71, 72, 74, 76, 72, 76, 72, 76, 69, 72, 69, 65, 72, 69],
+  },
+  {
+    id: 'satie-gymnopedie-1',
+    composer: 'Erik Satie',
+    title: 'Gymnopédie No. 1',
+    era: 'Modern Klasik',
+    difficulty: 'Kolay',
+    bpm: 78,
+    recommendedToneCode: '01',
+    description: 'Minimalist, dingin ve modern piyano eğitiminin en sevilen atmosferik parçası.',
+    tip: 'Ton 01 Elec Piano veya 00 Piano ile yavaş ve meditatif bir tempoda çalın.',
+    midiSequence: [78, 81, 79, 78, 73, 71, 73, 74, 69, 66],
+  },
+  {
+    id: 'traditional-greensleeves',
+    composer: 'Geleneksel (Rönesans)',
+    title: 'Greensleeves',
+    era: 'Rönesans / Klasik Etüt',
+    difficulty: 'Orta',
+    bpm: 100,
+    recommendedToneCode: '47',
+    description: '6/8 ölçüde, diyezli (G♯) armonik minör geçişi öğreten klasik piyano ve arp eseri.',
+    tip: 'Sondaki G♯4 siyah tuşuna dikkat edin; Ton 47 Harp ile harika tınlar.',
+    midiSequence: [69, 72, 74, 76, 77, 76, 74, 71, 67, 69, 71, 72, 69, 69, 68, 69, 71, 68, 64],
+  },
+];

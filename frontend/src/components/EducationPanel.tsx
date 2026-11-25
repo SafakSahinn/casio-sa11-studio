@@ -1,5 +1,7 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import {
+  FAMOUS_SONGS,
+  FamousSong,
   MUSIC_LESSONS,
   MusicLesson,
   SA11_KEYS,
@@ -8,7 +10,7 @@ import {
   ToneCategory,
 } from '../data/sa11Data';
 import { audioEngine } from '../audio/audioEngine';
-import { BookOpen, CheckCircle2, Music, Play, RotateCcw, Search, Sparkles } from 'lucide-react';
+import { Award, BookOpen, CheckCircle2, Music, Play, RotateCcw, Search, Sparkles, Square } from 'lucide-react';
 
 interface EducationPanelProps {
   selectedToneCode: string;
@@ -17,6 +19,7 @@ interface EducationPanelProps {
   lessonStepIndex: number;
   onStartLesson: (lesson: MusicLesson | null, customSequence?: number[], label?: string) => void;
   onResetLessonStep: () => void;
+  onPreviewNote: (midi: number | null) => void;
   customExerciseLabel: string | null;
   customSequence: number[] | null;
 }
@@ -40,13 +43,17 @@ export const EducationPanel: React.FC<EducationPanelProps> = ({
   lessonStepIndex,
   onStartLesson,
   onResetLessonStep,
+  onPreviewNote,
   customExerciseLabel,
   customSequence,
 }) => {
-  const [subTab, setSubTab] = useState<'theory' | 'tones'>('theory');
+  const [subTab, setSubTab] = useState<'theory' | 'songs' | 'tones'>('theory');
   const [selectedLesson, setSelectedLesson] = useState<MusicLesson>(MUSIC_LESSONS[0]);
+  const [selectedSong, setSelectedSong] = useState<FamousSong>(FAMOUS_SONGS[0]);
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState<'Tümü' | ToneCategory>('Tümü');
+  const [isPreviewing, setIsPreviewing] = useState(false);
+  const previewTimersRef = useRef<number[]>([]);
 
   const selectedTone = useMemo(
     () => SA11_TONES.find((t) => t.code === selectedToneCode) ?? SA11_TONES[0],
@@ -66,12 +73,35 @@ export const EducationPanel: React.FC<EducationPanelProps> = ({
     });
   }, [search, category]);
 
-  const playSequencePreview = (seq: number[], tone: SA11Tone) => {
+  const stopPreview = () => {
+    previewTimersRef.current.forEach((id) => window.clearTimeout(id));
+    previewTimersRef.current = [];
+    setIsPreviewing(false);
+    onPreviewNote(null);
+  };
+
+  const playSequencePreview = (seq: number[], tone: SA11Tone, bpm = 110) => {
+    stopPreview();
+    setIsPreviewing(true);
+    const stepMs = Math.round((60 / bpm) * 1000 * 0.72);
+    const noteMs = Math.max(160, Math.round(stepMs * 0.82));
+
     seq.forEach((midi, idx) => {
-      window.setTimeout(() => {
-        audioEngine.playShortNote(midi, tone, 280);
-      }, idx * 340);
+      const startId = window.setTimeout(() => {
+        audioEngine.playShortNote(midi, tone, noteMs);
+        onPreviewNote(midi);
+      }, idx * stepMs);
+      const clearId = window.setTimeout(() => {
+        onPreviewNote(null);
+      }, idx * stepMs + noteMs);
+      previewTimersRef.current.push(startId, clearId);
     });
+
+    const endId = window.setTimeout(() => {
+      setIsPreviewing(false);
+      onPreviewNote(null);
+    }, seq.length * stepMs + 80);
+    previewTimersRef.current.push(endId);
   };
 
   const activeSeq =
@@ -82,18 +112,24 @@ export const EducationPanel: React.FC<EducationPanelProps> = ({
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       {/* Sub-navigation bar */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button
             className={`btn ${subTab === 'theory' ? 'btn-primary' : ''}`}
             onClick={() => setSubTab('theory')}
           >
-            <BookOpen size={15} /> Temel Müzik Dersleri (Notalardan İtibaren)
+            <BookOpen size={15} /> Temel Müzik Dersleri (8 Ders)
+          </button>
+          <button
+            className={`btn ${subTab === 'songs' ? 'btn-primary' : ''}`}
+            onClick={() => setSubTab('songs')}
+          >
+            <Award size={15} /> Meşhur Eserler ({FAMOUS_SONGS.length} Şarkı)
           </button>
           <button
             className={`btn ${subTab === 'tones' ? 'btn-primary' : ''}`}
             onClick={() => setSubTab('tones')}
           >
-            <Music size={15} /> 100 Ton Rehberi & Eğitimi (00–99)
+            <Music size={15} /> 100 Ton Rehberi (00–99)
           </button>
         </div>
 
@@ -108,6 +144,7 @@ export const EducationPanel: React.FC<EducationPanelProps> = ({
               className="btn btn-sm"
               style={{ marginLeft: 6, padding: '2px 7px' }}
               onClick={onResetLessonStep}
+              title="Baştan Başla"
             >
               <RotateCcw size={12} />
             </button>
@@ -115,9 +152,9 @@ export const EducationPanel: React.FC<EducationPanelProps> = ({
         )}
       </div>
 
-      {subTab === 'theory' ? (
+      {/* TAB 1: Basic Music Theory Curriculum */}
+      {subTab === 'theory' && (
         <div className="grid-asymmetric">
-          {/* Left: Lesson List */}
           <div className="card" style={{ padding: 14 }}>
             <div className="card-header" style={{ marginBottom: 10 }}>
               <span className="card-title">Müfredat (8 Ders)</span>
@@ -157,17 +194,14 @@ export const EducationPanel: React.FC<EducationPanelProps> = ({
             </div>
           </div>
 
-          {/* Right: Active Lesson Content & Interactive Exercise */}
           <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                  <span className="chip accent">{selectedLesson.level}</span>
-                  <span className="chip mono">Önerilen SA-11 Tonu: #{selectedLesson.recommendedToneCode}</span>
-                </div>
-                <h2 style={{ fontSize: 19, fontWeight: 750, color: 'var(--text-h)' }}>{selectedLesson.title}</h2>
-                <p style={{ color: 'var(--muted)', marginTop: 4 }}>{selectedLesson.summary}</p>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                <span className="chip accent">{selectedLesson.level}</span>
+                <span className="chip mono">Önerilen SA-11 Tonu: #{selectedLesson.recommendedToneCode}</span>
               </div>
+              <h2 style={{ fontSize: 19, fontWeight: 750, color: 'var(--text-h)' }}>{selectedLesson.title}</h2>
+              <p style={{ color: 'var(--muted)', marginTop: 4 }}>{selectedLesson.summary}</p>
             </div>
 
             <div style={{ background: 'var(--side)', borderRadius: 10, padding: 14, border: '1px solid var(--border)' }}>
@@ -181,7 +215,6 @@ export const EducationPanel: React.FC<EducationPanelProps> = ({
               </ul>
             </div>
 
-            {/* Interactive Exercise Strip */}
             <div style={{ border: '1px solid var(--border)', borderRadius: 10, padding: 16, background: '#fff' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginBottom: 12 }}>
                 <div>
@@ -189,15 +222,21 @@ export const EducationPanel: React.FC<EducationPanelProps> = ({
                   <div style={{ fontSize: 12.5, color: 'var(--muted)' }}>{selectedLesson.exerciseTitle}</div>
                 </div>
                 <div style={{ display: 'flex', gap: 8 }}>
-                  <button
-                    className="btn btn-sm"
-                    onClick={() => {
-                      const t = SA11_TONES.find((x) => x.code === selectedLesson.recommendedToneCode) ?? SA11_TONES[0];
-                      playSequencePreview(selectedLesson.targetMidiSequence, t);
-                    }}
-                  >
-                    <Play size={13} /> Örneği Dinle
-                  </button>
+                  {isPreviewing ? (
+                    <button className="btn btn-sm btn-danger" onClick={stopPreview}>
+                      <Square size={13} /> Durdur
+                    </button>
+                  ) : (
+                    <button
+                      className="btn btn-sm"
+                      onClick={() => {
+                        const t = SA11_TONES.find((x) => x.code === selectedLesson.recommendedToneCode) ?? SA11_TONES[0];
+                        playSequencePreview(selectedLesson.targetMidiSequence, t);
+                      }}
+                    >
+                      <Play size={13} /> Örneği Dinle (3D İzle)
+                    </button>
+                  )}
                   <button
                     className="btn btn-sm btn-primary"
                     onClick={() => onStartLesson(selectedLesson)}
@@ -223,14 +262,8 @@ export const EducationPanel: React.FC<EducationPanelProps> = ({
                         borderRadius: 8,
                         textAlign: 'center',
                         cursor: 'pointer',
-                        border: `1.5px solid ${
-                          isDone ? 'var(--ok)' : isCurrent ? 'var(--accent)' : 'var(--border)'
-                        }`,
-                        background: isDone
-                          ? 'var(--ok-soft)'
-                          : isCurrent
-                          ? 'var(--accent-soft)'
-                          : 'var(--panel)',
+                        border: `1.5px solid ${isDone ? 'var(--ok)' : isCurrent ? 'var(--accent)' : 'var(--border)'}`,
+                        background: isDone ? 'var(--ok-soft)' : isCurrent ? 'var(--accent-soft)' : 'var(--panel)',
                       }}
                     >
                       <div className="mono" style={{ fontWeight: 700, fontSize: 14, color: isCurrent ? 'var(--accent)' : isDone ? 'var(--ok)' : 'var(--text-h)' }}>
@@ -243,29 +276,158 @@ export const EducationPanel: React.FC<EducationPanelProps> = ({
               </div>
 
               {activeLessonId === selectedLesson.id && !customSequence && lessonStepIndex >= selectedLesson.targetMidiSequence.length && (
-                <div
-                  style={{
-                    marginTop: 12,
-                    padding: '10px 14px',
-                    borderRadius: 8,
-                    background: 'var(--ok-soft)',
-                    color: 'var(--ok)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 8,
-                    fontWeight: 600,
-                  }}
-                >
+                <div style={{ marginTop: 12, padding: '10px 14px', borderRadius: 8, background: 'var(--ok-soft)', color: 'var(--ok)', display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600 }}>
                   <CheckCircle2 size={16} /> Harika! Bu dersin tüm notalarını başarıyla tamamladınız.
                 </div>
               )}
             </div>
           </div>
         </div>
-      ) : (
-        /* 100 Tones Guide & Interactive Education */
+      )}
+
+      {/* TAB 2: Famous Piano Songs Repertoire */}
+      {subTab === 'songs' && (
         <div className="grid-asymmetric">
-          {/* Left: Selected Tone Detail Card */}
+          {/* Left: Famous Composers & Songs List */}
+          <div className="card" style={{ padding: 14 }}>
+            <div className="card-header" style={{ marginBottom: 10 }}>
+              <span className="card-title">Klasik & Meşhur Eserler</span>
+              <span className="chip ok">{FAMOUS_SONGS.length} Eser</span>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 490, overflowY: 'auto' }}>
+              {FAMOUS_SONGS.map((song) => {
+                const isSel = selectedSong.id === song.id;
+                const isPrac = customExerciseLabel === `${song.composer} — ${song.title}`;
+                return (
+                  <div
+                    key={song.id}
+                    onClick={() => {
+                      setSelectedSong(song);
+                      onSelectTone(song.recommendedToneCode);
+                    }}
+                    style={{
+                      padding: '10px 12px',
+                      borderRadius: 8,
+                      border: `1px solid ${isSel ? 'var(--accent)' : 'var(--border)'}`,
+                      background: isSel ? 'var(--active-bg)' : '#fff',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
+                      <span className={`chip ${song.difficulty === 'Kolay' ? 'ok' : song.difficulty === 'Orta' ? 'accent' : 'warn'}`}>
+                        {song.difficulty}
+                      </span>
+                      <span className="mono" style={{ fontSize: 11, color: 'var(--muted)' }}>
+                        {isPrac ? 'Pratik Açık' : `${song.bpm} BPM`}
+                      </span>
+                    </div>
+                    <div style={{ fontWeight: 700, fontSize: 13.2, color: 'var(--text-h)' }}>{song.title}</div>
+                    <div style={{ fontSize: 12, color: 'var(--muted)' }}>{song.composer}</div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Right: Selected Famous Song Interactive Sheet & 3D Practice */}
+          <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
+                <span className="chip accent">{selectedSong.composer}</span>
+                <span className="chip">{selectedSong.era}</span>
+                <span className="chip mono">Ton #{selectedSong.recommendedToneCode}</span>
+                <span className="chip mono">{selectedSong.bpm} BPM</span>
+              </div>
+              <h2 style={{ fontSize: 20, fontWeight: 800, color: 'var(--text-h)' }}>{selectedSong.title}</h2>
+              <p style={{ color: 'var(--muted)', marginTop: 4 }}>{selectedSong.description}</p>
+            </div>
+
+            <div style={{ background: 'var(--side)', borderRadius: 10, padding: 13, border: '1px solid var(--border)', fontSize: 13 }}>
+              <strong>Eğitmen İpucu:</strong> {selectedSong.tip}
+            </div>
+
+            <div style={{ border: '1px solid var(--border)', borderRadius: 10, padding: 16, background: '#fff' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginBottom: 12 }}>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-h)' }}>Nota Dizilimi ({selectedSong.midiSequence.length} Nota)</div>
+                  <div style={{ fontSize: 12.5, color: 'var(--muted)' }}>
+                    Pratiği başlattığınızda sıradaki tuş 3D klavyede mavi yanar; doğru tuşa bastığınızda kırmızıya dönüp ilerler.
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  {isPreviewing ? (
+                    <button className="btn btn-sm btn-danger" onClick={stopPreview}>
+                      <Square size={13} /> Durdur
+                    </button>
+                  ) : (
+                    <button
+                      className="btn btn-sm"
+                      onClick={() => {
+                        const t = SA11_TONES.find((x) => x.code === selectedSong.recommendedToneCode) ?? SA11_TONES[0];
+                        playSequencePreview(selectedSong.midiSequence, t, selectedSong.bpm);
+                      }}
+                    >
+                      <Play size={13} /> Eseri Dinle (3D İzle)
+                    </button>
+                  )}
+                  <button
+                    className="btn btn-sm btn-primary"
+                    onClick={() => {
+                      onSelectTone(selectedSong.recommendedToneCode);
+                      onStartLesson(null, selectedSong.midiSequence, `${selectedSong.composer} — ${selectedSong.title}`);
+                    }}
+                  >
+                    <Sparkles size={13} /> 3D Klavyede Çalmayı Öğren
+                  </button>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
+                {selectedSong.midiSequence.map((midi, idx) => {
+                  const k = SA11_KEYS.find((x) => x.midi === midi);
+                  const isThisSong = customExerciseLabel === `${selectedSong.composer} — ${selectedSong.title}`;
+                  const isDone = isThisSong && idx < lessonStepIndex;
+                  const isCurrent = isThisSong && idx === lessonStepIndex;
+                  return (
+                    <div
+                      key={`${midi}-${idx}`}
+                      onClick={() => {
+                        const t = SA11_TONES.find((x) => x.code === selectedSong.recommendedToneCode) ?? selectedTone;
+                        audioEngine.playShortNote(midi, t);
+                      }}
+                      style={{
+                        minWidth: 54,
+                        padding: '7px 8px',
+                        borderRadius: 8,
+                        textAlign: 'center',
+                        cursor: 'pointer',
+                        border: `1.5px solid ${isDone ? 'var(--ok)' : isCurrent ? 'var(--accent)' : 'var(--border)'}`,
+                        background: isDone ? 'var(--ok-soft)' : isCurrent ? 'var(--accent-soft)' : 'var(--panel)',
+                      }}
+                    >
+                      <div className="mono" style={{ fontWeight: 700, fontSize: 13.5, color: isCurrent ? 'var(--accent)' : isDone ? 'var(--ok)' : 'var(--text-h)' }}>
+                        {k?.note ?? midi}
+                      </div>
+                      <div style={{ fontSize: 10.5, color: 'var(--muted)' }}>{k?.solfege}</div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {customExerciseLabel === `${selectedSong.composer} — ${selectedSong.title}` &&
+                lessonStepIndex >= selectedSong.midiSequence.length && (
+                  <div style={{ marginTop: 12, padding: '10px 14px', borderRadius: 8, background: 'var(--ok-soft)', color: 'var(--ok)', display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600 }}>
+                    <CheckCircle2 size={16} /> Tebrikler! {selectedSong.title} eserini baştan sona tamamladınız.
+                  </div>
+                )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 3: All 100 Tones Guide & Interactive Education */}
+      {subTab === 'tones' && (
+        <div className="grid-asymmetric">
           <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 14, height: 'fit-content' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <span className="chip accent mono" style={{ fontSize: 13 }}>TON #{selectedTone.code}</span>
@@ -312,7 +474,6 @@ export const EducationPanel: React.FC<EducationPanelProps> = ({
             </div>
           </div>
 
-          {/* Right: Searchable 100-Tone Grid */}
           <div className="card">
             <div style={{ display: 'flex', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
               <div style={{ position: 'relative', flex: '1 1 220px' }}>
@@ -355,7 +516,7 @@ export const EducationPanel: React.FC<EducationPanelProps> = ({
                     key={tone.code}
                     onClick={() => {
                       onSelectTone(tone.code);
-                      audioEngine.playShortNote(tone.practiceMidi[0] ?? 60, tone, 240);
+                      audioEngine.playShortNote(tone.practiceMidi[0] ?? 60, tone, 320);
                     }}
                     style={{
                       textAlign: 'left',
@@ -368,31 +529,12 @@ export const EducationPanel: React.FC<EducationPanelProps> = ({
                     }}
                   >
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span
-                        className="mono"
-                        style={{
-                          fontWeight: 700,
-                          fontSize: 12,
-                          color: isSel ? 'var(--accent)' : 'var(--muted)',
-                        }}
-                      >
+                      <span className="mono" style={{ fontWeight: 700, fontSize: 12, color: isSel ? 'var(--accent)' : 'var(--muted)' }}>
                         {tone.code}
                       </span>
-                      <span style={{ fontSize: 10, color: 'var(--muted)' }}>
-                        {tone.category.split(' ')[0]}
-                      </span>
+                      <span style={{ fontSize: 10, color: 'var(--muted)' }}>{tone.category.split(' ')[0]}</span>
                     </div>
-                    <div
-                      style={{
-                        fontWeight: 650,
-                        fontSize: 12.8,
-                        color: 'var(--text-h)',
-                        marginTop: 2,
-                        whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                      }}
-                    >
+                    <div style={{ fontWeight: 650, fontSize: 12.8, color: 'var(--text-h)', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                       {tone.name}
                     </div>
                   </button>
