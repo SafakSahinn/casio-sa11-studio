@@ -34,6 +34,7 @@ export function App() {
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>('');
   const [isLineInConnected, setIsLineInConnected] = useState(false);
   const [monitorOutput, setMonitorOutput] = useState(false);
+  const [monitorGain, setMonitorGain] = useState(1.25);
 
   // Real-time pitch detection & active keys (RED on 3D keyboard!)
   const [detectedMidi, setDetectedMidi] = useState<number | null>(null);
@@ -363,12 +364,29 @@ export function App() {
               onClick={() => {
                 const next = !monitorOutput;
                 setMonitorOutput(next);
-                audioEngine.updateFilterConfig({ monitorOutput: next });
+                audioEngine.updateFilterConfig({ monitorOutput: next, monitorGain });
               }}
             >
               {monitorOutput ? <Volume2 size={14} color="var(--ok)" /> : <VolumeX size={14} />}
               Monitör
             </button>
+
+            {monitorOutput && (
+              <input
+                type="range"
+                min={0.2}
+                max={2.5}
+                step={0.05}
+                value={monitorGain}
+                title={`Klavye Monitör Sesi: %${Math.round(monitorGain * 100)}`}
+                style={{ width: 78 }}
+                onChange={(e) => {
+                  const val = Number(e.target.value);
+                  setMonitorGain(val);
+                  audioEngine.updateFilterConfig({ monitorGain: val });
+                }}
+              />
+            )}
 
             {!isLineInConnected ? (
               <button className="btn btn-sm btn-primary" onClick={() => void handleConnectLineIn()}>

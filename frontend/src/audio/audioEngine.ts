@@ -17,6 +17,7 @@ export interface LiveFilterConfig {
   notch50Hz: boolean;
   sos: number[][] | null; // From Python scipy.signal.butter/cheby/bessel/ellip
   monitorOutput: boolean; // Listen to filtered Line-In through PC speakers
+  monitorGain: number;    // 0.0 .. 2.5 gain to balance real keyboard with site volume
   gateThresholdDb: number;
 }
 
@@ -227,6 +228,7 @@ export class SA11AudioEngine {
     notch50Hz: true,
     sos: null,
     monitorOutput: false,
+    monitorGain: 1.25,
     gateThresholdDb: -38,
   };
 
@@ -283,7 +285,7 @@ export class SA11AudioEngine {
     this.filteredAnalyser.smoothingTimeConstant = 0.72;
 
     this.monitorGain = ctx.createGain();
-    this.monitorGain.gain.value = this.filterConfig.monitorOutput ? 0.75 : 0.0;
+    this.monitorGain.gain.value = this.filterConfig.monitorOutput ? this.filterConfig.monitorGain : 0.0;
 
     // PCM Recorder tap (captures clean audio post-filter or raw)
     this.recorderNode = ctx.createScriptProcessor(2048, 1, 1);
@@ -395,7 +397,7 @@ export class SA11AudioEngine {
     this.filterNodes.push(silentGain);
 
     // Optional live monitoring (crisp full-range sound!)
-    this.monitorGain.gain.value = this.filterConfig.monitorOutput ? 0.85 : 0.0;
+    this.monitorGain.gain.value = this.filterConfig.monitorOutput ? this.filterConfig.monitorGain : 0.0;
     audioTail.connect(this.monitorGain);
     this.monitorGain.connect(this.ctx.destination);
   }

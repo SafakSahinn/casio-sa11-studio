@@ -24,12 +24,18 @@ export class SA11SynthEngine {
       this.compressor.release.value = 0.15;
 
       this.masterGain = ctx.createGain();
-      this.masterGain.gain.value = 0.72;
+      this.masterGain.gain.value = 0.45;
 
       this.masterGain.connect(this.compressor);
       this.compressor.connect(ctx.destination);
     }
     return this.masterGain;
+  }
+
+  public setMasterVolume(vol: number): void {
+    if (this.masterGain) {
+      this.masterGain.gain.value = Math.max(0, Math.min(1.5, vol));
+    }
   }
 
   private getNoiseBuffer(ctx: AudioContext): AudioBuffer {
