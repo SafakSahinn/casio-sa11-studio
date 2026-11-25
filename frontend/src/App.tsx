@@ -23,6 +23,7 @@ type ActiveTab = 'education' | 'record' | 'maker' | 'hardware';
 export function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('education');
   const [selectedToneCode, setSelectedToneCode] = useState<string>('00');
+  const [octaveShift, setOctaveShift] = useState<number>(0);
 
   // Audio / Line-In state
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
@@ -81,8 +82,8 @@ export function App() {
           approx: 'butterworth',
           ftype: 'bandpass',
           order: 4,
-          fc: 145,
-          fc_high: 2200,
+          fc: 80,
+          fc_high: 2600,
           fs: audioEngine.getSampleRate(),
           topology: 'sallen-key',
         });
@@ -118,7 +119,7 @@ export function App() {
       return;
     }
     const timer = window.setInterval(() => {
-      const reading = audioEngine.analyzeLivePitch();
+      const reading = audioEngine.analyzeLivePitch(octaveShift);
       const pct = Math.max(0, Math.min(100, ((reading.rmsDb + 60) / 60) * 100));
       setRmsLevelPct(pct);
 
@@ -127,13 +128,18 @@ export function App() {
         setDetectedNoteLabel(`${reading.key.note} (${reading.key.solfege.replace(/\d/, '')})`);
         setDetectedFreqHz(reading.freqHz);
         setDetectedCents(reading.cents);
+      } else if (reading.freqHz) {
+        setDetectedMidi(null);
+        setDetectedNoteLabel('Aralık Dışı');
+        setDetectedFreqHz(reading.freqHz);
+        setDetectedCents(null);
       } else {
         setDetectedMidi(null);
       }
     }, 33);
 
     return () => window.clearInterval(timer);
-  }, [isLineInConnected]);
+  }, [isLineInConnected, octaveShift]);
 
   // Advance Education exercise automatically when user hits the target note (via real SA-11 OR 3D click!)
   const combinedActiveMidis = useMemo(() => {
@@ -197,15 +203,17 @@ export function App() {
   };
 
   const handleVirtualKeyPress = (k: SA11Key) => {
-    audioEngine.noteOn(k.midi, selectedTone);
+    const shiftedMidi = k.midi + octaveShift * 12;
+    const shiftedFreq = k.freq * Math.pow(2, octaveShift);
+    audioEngine.noteOn(shiftedMidi, selectedTone);
     setVirtualMidiNotes((prev) => (prev.includes(k.midi) ? prev : [...prev, k.midi]));
     setDetectedNoteLabel(`${k.note} (${k.solfege.replace(/\d/, '')})`);
-    setDetectedFreqHz(k.freq);
+    setDetectedFreqHz(shiftedFreq);
     setDetectedCents(0);
   };
 
   const handleVirtualKeyRelease = (k: SA11Key) => {
-    audioEngine.noteOff(k.midi);
+    audioEngine.noteOff(k.midi + octaveShift * 12);
     setVirtualMidiNotes((prev) => prev.filter((m) => m !== k.midi));
   };
 
@@ -349,6 +357,8 @@ export function App() {
             detectedFreqHz={detectedFreqHz}
             detectedCents={detectedCents}
             isLineInConnected={isLineInConnected}
+            octaveShift={octaveShift}
+            onOctaveShiftChange={setOctaveShift}
             onVirtualKeyPress={handleVirtualKeyPress}
             onVirtualKeyRelease={handleVirtualKeyRelease}
           />

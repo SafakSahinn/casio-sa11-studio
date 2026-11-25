@@ -12,6 +12,8 @@ interface CasioSA11_3DProps {
   detectedFreqHz: number | null;
   detectedCents: number | null;
   isLineInConnected: boolean;
+  octaveShift: number;
+  onOctaveShiftChange: (shift: number) => void;
   onVirtualKeyPress: (key: SA11Key) => void;
   onVirtualKeyRelease: (key: SA11Key) => void;
   onToneDigitClick?: (digit: number) => void;
@@ -118,6 +120,8 @@ export const CasioSA11_3D: React.FC<CasioSA11_3DProps> = ({
   detectedFreqHz,
   detectedCents,
   isLineInConnected,
+  octaveShift,
+  onOctaveShiftChange,
   onVirtualKeyPress,
   onVirtualKeyRelease,
 }) => {
@@ -543,11 +547,21 @@ export const CasioSA11_3D: React.FC<CasioSA11_3DProps> = ({
   return (
     <div className="stage-card">
       <div className="stage-toolbar">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <span style={{ fontWeight: 700, fontSize: 13.5, color: 'var(--text-h)' }}>
             Casio SA-11 — İnteraktif 3D Model
           </span>
-          <span className="chip mono">32 Tuş (F3–C6)</span>
+          <select
+            className="select mono"
+            style={{ width: 'auto', padding: '4px 8px', fontSize: 11.5 }}
+            title="Klavyenizin oktav aralığına göre seçin"
+            value={octaveShift}
+            onChange={(e) => onOctaveShiftChange(Number(e.target.value))}
+          >
+            <option value={-1}>Oktav: -1 (F2–C5)</option>
+            <option value={0}>Oktav: Normal (F3–C6)</option>
+            <option value={1}>Oktav: +1 (F4–C7)</option>
+          </select>
           <span className={`chip ${isLineInConnected ? 'ok' : ''}`}>
             {isLineInConnected ? 'Line-In Aktif' : 'Sanal / Tıklanabilir Mod'}
           </span>

@@ -21,7 +21,8 @@ export interface LiveFilterConfig {
 }
 
 /**
- * YIN Fundamental Frequency Estimator tuned for Casio SA-11 (F3=174.6Hz .. C6=1046.5Hz)
+ * YIN Fundamental Frequency Estimator covering F2 (87 Hz) .. C7 (2093 Hz)
+ * so any Casio SA-11 octave register (F2-C5, F3-C6, F4-C7) is accurately measured.
  */
 export function detectPitchYIN(
   buffer: Float32Array,
@@ -29,9 +30,9 @@ export function detectPitchYIN(
   threshold = 0.14
 ): { freq: number | null; confidence: number } {
   const halfLen = Math.floor(buffer.length / 2);
-  // SA-11 range with small margin: 150 Hz .. 1200 Hz
-  const minTau = Math.max(2, Math.floor(sampleRate / 1200));
-  const maxTau = Math.min(halfLen - 1, Math.ceil(sampleRate / 150));
+  // Wide range covering F2 (87 Hz) to C7 (2093 Hz) with margin
+  const minTau = Math.max(2, Math.floor(sampleRate / 2300));
+  const maxTau = Math.min(halfLen - 1, Math.ceil(sampleRate / 80));
 
   const yin = new Float32Array(maxTau + 1);
   let runningSum = 0;
@@ -305,7 +306,7 @@ export class SA11AudioEngine {
     this.monitorGain.connect(this.ctx.destination);
   }
 
-  public analyzeLivePitch(): PitchReading {
+  public analyzeLivePitch(octaveShift = 0): PitchReading {
     if (!this.filteredAnalyser || !this.ctx) {
       return { freqHz: null, key: null, cents: null, rmsDb: -96, confidence: 0 };
     }
@@ -322,11 +323,13 @@ export class SA11AudioEngine {
     }
 
     const { freq, confidence } = detectPitchYIN(this.timeBuf, this.ctx.sampleRate);
-    if (!freq || confidence < 0.75) {
+    if (!freq || confidence < 0.72) {
       return { freqHz: null, key: null, cents: null, rmsDb, confidence };
     }
 
-    const match = findClosestSA11Key(freq);
+    // Normalize detected frequency into F3–C6 key index using current octaveShift
+    const adjustedFreq = freq / Math.pow(2, octaveShift);
+    const match = findClosestSA11Key(adjustedFreq);
     return {
       freqHz: freq,
       key: match?.key ?? null,
