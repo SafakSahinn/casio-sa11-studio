@@ -1,13 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { CasioSA11_3D } from './components/CasioSA11_3D';
 import { EducationPanel } from './components/EducationPanel';
-import { FilterLabPanel } from './components/FilterLabPanel';
 import { RecordedTake, RecordStudioPanel } from './components/RecordStudioPanel';
 import { MusicMakerPanel } from './components/MusicMakerPanel';
 import { HardwareGuidePanel } from './components/HardwareGuidePanel';
-import { MUSIC_LESSONS, MusicLesson, SA11_KEYS, SA11_TONES, SA11Key, SA11Tone } from './data/sa11Data';
+import { MUSIC_LESSONS, MusicLesson, SA11_KEYS, SA11_TONES, SA11Key } from './data/sa11Data';
 import { audioEngine } from './audio/audioEngine';
-import { checkBackendHealth, FilterDesignResult, requestFilterDesign } from './audio/dspClient';
+import { checkBackendHealth, requestFilterDesign } from './audio/dspClient';
 import {
   BookOpen,
   Cable,
@@ -15,12 +14,11 @@ import {
   Headphones,
   Mic,
   PlugZap,
-  Sliders,
   Volume2,
   VolumeX,
 } from 'lucide-react';
 
-type ActiveTab = 'education' | 'filter' | 'record' | 'maker' | 'hardware';
+type ActiveTab = 'education' | 'record' | 'maker' | 'hardware';
 
 export function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('education');
@@ -31,8 +29,6 @@ export function App() {
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>('');
   const [isLineInConnected, setIsLineInConnected] = useState(false);
   const [monitorOutput, setMonitorOutput] = useState(false);
-  const [liveFilterEnabled, setLiveFilterEnabled] = useState(true);
-  const [notch50Hz, setNotch50Hz] = useState(true);
 
   // Real-time pitch detection & active keys (RED on 3D keyboard!)
   const [detectedMidi, setDetectedMidi] = useState<number | null>(null);
@@ -45,9 +41,8 @@ export function App() {
   const [virtualMidiNotes, setVirtualMidiNotes] = useState<number[]>([]);
   const [seqMidiNote, setSeqMidiNote] = useState<number | null>(null);
 
-  // Python DSP backend state
+  // Background Active Filter DSP backend status
   const [backendOnline, setBackendOnline] = useState(false);
-  const [activeFilterResult, setActiveFilterResult] = useState<FilterDesignResult | null>(null);
 
   // Education interactive practice state
   const [activeLessonId, setActiveLessonId] = useState<string | null>(MUSIC_LESSONS[0].id);
@@ -76,12 +71,27 @@ export function App() {
       ? activeSequence[lessonStepIndex]
       : null;
 
-  // Check Python DSP Backend health on mount & periodically
+  // Automatically configure SA-11 Active Band-Pass + 50Hz Notch pre-filter behind the scenes for clean key reading
   useEffect(() => {
-    const check = () => checkBackendHealth().then(setBackendOnline);
-    void check();
-    const t = window.setInterval(check, 8000);
-    return () => window.clearInterval(t);
+    const initDsp = async () => {
+      const online = await checkBackendHealth();
+      setBackendOnline(online);
+      try {
+        const res = await requestFilterDesign({
+          approx: 'butterworth',
+          ftype: 'bandpass',
+          order: 4,
+          fc: 145,
+          fc_high: 2200,
+          fs: audioEngine.getSampleRate(),
+          topology: 'sallen-key',
+        });
+        audioEngine.updateFilterConfig({ sos: res.sos, enabled: true, notch50Hz: true });
+      } catch {
+        // Default built-in Web Audio filter remains active
+      }
+    };
+    void initDsp();
   }, []);
 
   // Load initial input device list
@@ -199,41 +209,14 @@ export function App() {
     setVirtualMidiNotes((prev) => prev.filter((m) => m !== k.midi));
   };
 
-  const handleApplyFilterResult = (res: FilterDesignResult) => {
-    setActiveFilterResult(res);
-    audioEngine.updateFilterConfig({ sos: res.sos, enabled: liveFilterEnabled, notch50Hz });
-  };
-
-  const handleApplyToneFilter = async (tone: SA11Tone) => {
-    try {
-      const res = await requestFilterDesign({
-        approx: tone.recommendedFilter.approx,
-        ftype: tone.recommendedFilter.ftype,
-        order: 4,
-        fc: tone.recommendedFilter.fc,
-        fc_high: tone.recommendedFilter.fcHigh ?? null,
-        fs: audioEngine.getSampleRate(),
-        topology: 'sallen-key',
-      });
-      handleApplyFilterResult(res);
-      setActiveTab('filter');
-    } catch (e) {
-      alert(String(e));
-    }
-  };
-
   const tabMeta: Record<ActiveTab, { title: string; sub: string }> = {
     education: {
       title: 'Eğitim Merkezi — Temel Müzik & 100 Ton Rehberi',
       sub: 'Notalardan itibaren interaktif dersler ve Casio SA-11 üzerindeki tüm 100 tonun eğitimi',
     },
-    filter: {
-      title: 'Aktif Filtre Tasarımı & Canlı DSP Laboratuvarı',
-      sub: 'Python SciPy ile Sallen-Key / MFB tasarımı, Bode analizi ve gerçek zamanlı Line-In filtreleme',
-    },
     record: {
-      title: 'Kayıt Stüdyosu & Sıfır-Fazlı Sinyal Temizleme',
-      sub: 'Casio SA-11 Line-In kaydı, 50 Hz hum eliminasyonu ve Python sosfiltfilt iyileştirme',
+      title: 'Kayıt Stüdyosu & Otomatik Ses Temizleme',
+      sub: 'Casio SA-11 Line-In kaydı, arka planda aktif filtre temizleme ve WAV dışa aktarma',
     },
     maker: {
       title: 'Music Maker — 16-Adım Ritim & Melodi Stüdyosu',
@@ -247,18 +230,18 @@ export function App() {
 
   return (
     <div className="app-shell">
-      {/* Left Sidebar (FilterDesign Studio light minimalist aesthetic) */}
+      {/* Left Sidebar (Ferah, aydınlık tasarım) */}
       <aside className="sidebar">
         <div className="sidebar-header">
           <div className="brand">
             <div className="brand-mark">SA11</div>
             <span>SA-11 Studio</span>
           </div>
-          <span className="chip mono" style={{ fontSize: 10.5 }}>v1.0</span>
+          <span className="chip mono" style={{ fontSize: 10.5 }}>v1.1</span>
         </div>
 
         <nav className="sidebar-nav">
-          <div className="nav-section">Müzik & Eğitim</div>
+          <div className="nav-section">Müzik & Stüdyo</div>
           <div
             className={`nav-item ${activeTab === 'education' ? 'active' : ''}`}
             onClick={() => setActiveTab('education')}
@@ -284,15 +267,7 @@ export function App() {
             <span className="nav-badge">16-Step</span>
           </div>
 
-          <div className="nav-section" style={{ marginTop: 12 }}>Mühendislik & DSP</div>
-          <div
-            className={`nav-item ${activeTab === 'filter' ? 'active' : ''}`}
-            onClick={() => setActiveTab('filter')}
-          >
-            <Sliders size={16} />
-            <span>Aktif Filtre Lab</span>
-            <span className={`nav-badge ${backendOnline ? 'ok' : ''}`}>{backendOnline ? 'SciPy' : 'DSP'}</span>
-          </div>
+          <div className="nav-section" style={{ marginTop: 12 }}>Klavye & Kurulum</div>
           <div
             className={`nav-item ${activeTab === 'hardware' ? 'active' : ''}`}
             onClick={() => setActiveTab('hardware')}
@@ -306,11 +281,11 @@ export function App() {
         <div className="sidebar-footer">
           <div className="status-pill">
             <span className={`dot ${isLineInConnected ? 'ok' : ''}`} />
-            <span>Line-In: {isLineInConnected ? 'Bağlı (48 kHz)' : 'Bağlı Değil'}</span>
+            <span>Line-In: {isLineInConnected ? 'Bağlı' : 'Bağlı Değil'}</span>
           </div>
           <div className="status-pill">
-            <span className={`dot ${backendOnline ? 'ok' : 'accent'}`} />
-            <span>DSP Motoru: {backendOnline ? 'Python SciPy' : 'Tarayıcı DSP (Aktif)'}</span>
+            <span className="dot ok" />
+            <span>Ses İşleme: Aktif ({backendOnline ? 'Python' : 'Otomatik'})</span>
           </div>
           <div className="status-pill">
             <span className="dot accent" />
@@ -401,25 +376,6 @@ export function App() {
                 setLessonStepIndex(0);
               }}
               onResetLessonStep={() => setLessonStepIndex(0)}
-              onApplyToneFilter={(t) => void handleApplyToneFilter(t)}
-            />
-          )}
-
-          {activeTab === 'filter' && (
-            <FilterLabPanel
-              backendOnline={backendOnline}
-              liveFilterEnabled={liveFilterEnabled}
-              notch50Hz={notch50Hz}
-              activeFilterResult={activeFilterResult}
-              onToggleLiveFilter={(v) => {
-                setLiveFilterEnabled(v);
-                audioEngine.updateFilterConfig({ enabled: v });
-              }}
-              onToggleNotch50Hz={(v) => {
-                setNotch50Hz(v);
-                audioEngine.updateFilterConfig({ notch50Hz: v });
-              }}
-              onFilterDesigned={handleApplyFilterResult}
             />
           )}
 

@@ -8,7 +8,7 @@ import {
   ToneCategory,
 } from '../data/sa11Data';
 import { audioEngine } from '../audio/audioEngine';
-import { BookOpen, CheckCircle2, Filter, Music, Play, RotateCcw, Search, Sparkles } from 'lucide-react';
+import { BookOpen, CheckCircle2, Music, Play, RotateCcw, Search, Sparkles } from 'lucide-react';
 
 interface EducationPanelProps {
   selectedToneCode: string;
@@ -17,7 +17,6 @@ interface EducationPanelProps {
   lessonStepIndex: number;
   onStartLesson: (lesson: MusicLesson | null, customSequence?: number[], label?: string) => void;
   onResetLessonStep: () => void;
-  onApplyToneFilter: (tone: SA11Tone) => void;
   customExerciseLabel: string | null;
   customSequence: number[] | null;
 }
@@ -41,7 +40,6 @@ export const EducationPanel: React.FC<EducationPanelProps> = ({
   lessonStepIndex,
   onStartLesson,
   onResetLessonStep,
-  onApplyToneFilter,
   customExerciseLabel,
   customSequence,
 }) => {
@@ -292,24 +290,6 @@ export const EducationPanel: React.FC<EducationPanelProps> = ({
                 Çalma Tekniği & Eğitim İpucu
               </div>
               <div style={{ fontSize: 12.8, color: 'var(--text)' }}>{selectedTone.playingTip}</div>
-            </div>
-
-            <div style={{ background: 'var(--accent-soft)', borderRadius: 8, padding: 12, border: '1px solid rgba(61,90,254,0.2)' }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--accent)', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
-                <Filter size={13} /> Önerilen Aktif Filtre Ayarı
-              </div>
-              <div className="mono" style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-h)' }}>
-                {selectedTone.recommendedFilter.approx.toUpperCase()} {selectedTone.recommendedFilter.ftype.toUpperCase()} @ {selectedTone.recommendedFilter.fc} Hz
-                {selectedTone.recommendedFilter.fcHigh ? ` – ${selectedTone.recommendedFilter.fcHigh} Hz` : ''}
-              </div>
-              <div style={{ fontSize: 12, color: 'var(--text)', marginTop: 4 }}>{selectedTone.recommendedFilter.reason}</div>
-              <button
-                className="btn btn-sm btn-primary"
-                style={{ marginTop: 8, width: '100%' }}
-                onClick={() => onApplyToneFilter(selectedTone)}
-              >
-                <Filter size={13} /> Bu Tonun Filtresini Canlı Uygula
-              </button>
             </div>
 
             <div style={{ display: 'flex', gap: 8 }}>

@@ -1,7 +1,8 @@
 // Real-Time Web Audio Engine: Line-In Capture, Python-Computed Active Filter Cascade,
 // YIN Pitch Detection (F3–C6), PCM WAV Recording, and Built-in Synth Preview
 
-import { findClosestSA11Key, midiToFreq, SA11Key, SA11Tone } from '../data/sa11Data';
+import { findClosestSA11Key, SA11Key, SA11Tone } from '../data/sa11Data';
+import { synthEngine } from './synthEngine';
 
 export interface PitchReading {
   freqHz: number | null;
@@ -136,12 +137,10 @@ export class SA11AudioEngine {
     gateThresholdDb: -42,
   };
 
-  // Synth voices for virtual clicks & education previews
-  private activeOscs = new Map<number, { osc: OscillatorNode; gain: GainNode }>();
-
   public ensureContext(): AudioContext {
     if (!this.ctx) {
-      this.ctx = new AudioContext({ sampleRate: 48000 });
+      // Match OS hardware sample rate natively (44.1 kHz or 48 kHz) for exact A4=440 Hz pitch
+      this.ctx = new AudioContext();
     }
     if (this.ctx.state === 'suspended') {
       void this.ctx.resume();
@@ -370,48 +369,19 @@ export class SA11AudioEngine {
   }
 
   // =========================================================================
-  // Built-in Web Audio Synth (for virtual 3D clicks, lessons & Music Maker)
+  // Built-in Realistic Multi-Instrument Synth (virtual clicks, lessons, maker)
   // =========================================================================
-  public noteOn(midi: number, tone?: SA11Tone, velocity = 0.25): void {
+  public noteOn(midi: number, tone?: SA11Tone, velocity = 0.58): void {
     const ctx = this.ensureContext();
-    this.noteOff(midi);
-
-    const osc = ctx.createOscillator();
-    const filter = ctx.createBiquadFilter();
-    const gain = ctx.createGain();
-
-    osc.type = tone?.synthWave ?? 'triangle';
-    osc.frequency.setValueAtTime(midiToFreq(midi), ctx.currentTime);
-
-    filter.type = 'lowpass';
-    filter.frequency.setValueAtTime(tone?.recommendedFilter.fc ?? 4800, ctx.currentTime);
-
-    gain.gain.setValueAtTime(0.001, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(velocity, ctx.currentTime + 0.012);
-
-    osc.connect(filter);
-    filter.connect(gain);
-    gain.connect(ctx.destination);
-    osc.start();
-
-    this.activeOscs.set(midi, { osc, gain });
+    synthEngine.noteOn(ctx, midi, tone, velocity);
   }
 
   public noteOff(midi: number): void {
-    const voice = this.activeOscs.get(midi);
-    if (!voice || !this.ctx) return;
-    const now = this.ctx.currentTime;
-    try {
-      voice.gain.gain.cancelScheduledValues(now);
-      voice.gain.gain.setValueAtTime(Math.max(0.001, voice.gain.gain.value), now);
-      voice.gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.14);
-      voice.osc.stop(now + 0.16);
-    } catch {}
-    this.activeOscs.delete(midi);
+    synthEngine.noteOff(midi);
   }
 
-  public playShortNote(midi: number, tone?: SA11Tone, durationMs = 280): void {
-    this.noteOn(midi, tone, 0.22);
+  public playShortNote(midi: number, tone?: SA11Tone, durationMs = 360): void {
+    this.noteOn(midi, tone, 0.55);
     window.setTimeout(() => this.noteOff(midi), durationMs);
   }
 
