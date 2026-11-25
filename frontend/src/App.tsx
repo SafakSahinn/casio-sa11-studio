@@ -26,6 +26,8 @@ export function App() {
   const [octaveShift, setOctaveShift] = useState<number>(0);
   const [tuningCents, setTuningCents] = useState<number>(0);
   const [isCalibrating, setIsCalibrating] = useState<boolean>(false);
+  const [calibrationProgress, setCalibrationProgress] = useState<number>(0);
+  const calibSamplesRef = useRef<number[]>([]);
 
   // Audio / Line-In state
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
@@ -125,20 +127,39 @@ export function App() {
       const pct = Math.max(0, Math.min(100, ((reading.rmsDb + 60) / 60) * 100));
       setRmsLevelPct(pct);
 
-      // Automatic device calibration: user presses leftmost white key (F) on their connected keyboard
-      if (isCalibrating && reading.freqHz && reading.confidence >= 0.8) {
-        const f3 = 174.6141; // Standard F3 (MIDI 53)
-        const ratio = reading.freqHz / f3;
-        const oct = Math.max(-1, Math.min(1, Math.round(Math.log2(ratio))));
-        const expectedF = f3 * Math.pow(2, oct);
-        const centsOffset = Math.max(-80, Math.min(80, Math.round(1200 * Math.log2(reading.freqHz / expectedF))));
-        setOctaveShift(oct);
-        setTuningCents(centsOffset);
-        setIsCalibrating(false);
-        setDetectedMidi(53);
-        setDetectedNoteLabel(`Kalibre: F${3 + oct}`);
-        setDetectedFreqHz(reading.freqHz);
-        setDetectedCents(centsOffset);
+      // Stable 10-frame median calibration: user holds leftmost white key (F) for ~0.5s
+      if (isCalibrating) {
+        if (reading.freqHz && reading.confidence >= 0.85) {
+          const buf = calibSamplesRef.current;
+          // Reject sudden octave/transient jump vs previous sample
+          if (buf.length > 0 && Math.abs(reading.freqHz - buf[buf.length - 1]) / buf[buf.length - 1] > 0.04) {
+            calibSamplesRef.current = [reading.freqHz];
+          } else {
+            buf.push(reading.freqHz);
+          }
+          setCalibrationProgress(calibSamplesRef.current.length);
+          setDetectedFreqHz(reading.freqHz);
+
+          if (calibSamplesRef.current.length >= 10) {
+            const sorted = [...calibSamplesRef.current].sort((a, b) => a - b);
+            const medianFreq = sorted[Math.floor(sorted.length / 2)];
+            const f3 = 174.6141; // Standard F3 (MIDI 53)
+            const ratio = medianFreq / f3;
+            const oct = Math.max(-1, Math.min(1, Math.round(Math.log2(ratio))));
+            const expectedF = f3 * Math.pow(2, oct);
+            const centsOffset = Math.max(-50, Math.min(50, Math.round(1200 * Math.log2(medianFreq / expectedF))));
+
+            setOctaveShift(oct);
+            setTuningCents(centsOffset);
+            setIsCalibrating(false);
+            setCalibrationProgress(0);
+            calibSamplesRef.current = [];
+            setDetectedMidi(53);
+            setDetectedNoteLabel(`Kalibre: F${3 + oct}`);
+            setDetectedFreqHz(medianFreq);
+            setDetectedCents(centsOffset);
+          }
+        }
         return;
       }
 
@@ -379,11 +400,16 @@ export function App() {
             octaveShift={octaveShift}
             tuningCents={tuningCents}
             isCalibrating={isCalibrating}
+            calibrationProgress={calibrationProgress}
             onOctaveShiftChange={(s) => {
               setOctaveShift(s);
               setTuningCents(0);
             }}
-            onStartCalibration={() => setIsCalibrating((prev) => !prev)}
+            onStartCalibration={() => {
+              calibSamplesRef.current = [];
+              setCalibrationProgress(0);
+              setIsCalibrating((prev) => !prev);
+            }}
             onVirtualKeyPress={handleVirtualKeyPress}
             onVirtualKeyRelease={handleVirtualKeyRelease}
           />

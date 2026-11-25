@@ -15,6 +15,7 @@ interface CasioSA11_3DProps {
   octaveShift: number;
   tuningCents: number;
   isCalibrating: boolean;
+  calibrationProgress: number;
   onOctaveShiftChange: (shift: number) => void;
   onStartCalibration: () => void;
   onVirtualKeyPress: (key: SA11Key) => void;
@@ -126,6 +127,7 @@ export const CasioSA11_3D: React.FC<CasioSA11_3DProps> = ({
   octaveShift,
   tuningCents,
   isCalibrating,
+  calibrationProgress,
   onOctaveShiftChange,
   onStartCalibration,
   onVirtualKeyPress,
@@ -573,13 +575,15 @@ export const CasioSA11_3D: React.FC<CasioSA11_3DProps> = ({
             disabled={!isLineInConnected}
             title={
               isLineInConnected
-                ? 'Klavyenizdeki en sol beyaz tuşa (Fa) basarak oktav ve akordu otomatik eşleştirin'
+                ? 'Klavyenizdeki en sol beyaz tuşa (Fa) 1 saniye basılı tutarak oktav ve akordu kararlı şekilde eşleştirin'
                 : 'Önce Line-In bağlantısını başlatın'
             }
             onClick={onStartCalibration}
           >
             <Crosshair size={13} />
-            {isCalibrating ? 'En Sol Tuşa (Fa) Basın...' : 'Otomatik Kalibre Et'}
+            {isCalibrating
+              ? `En Sol Tuşa (Fa) Basılı Tutun (${calibrationProgress}/10)`
+              : 'Otomatik Kalibre Et'}
           </button>
           {tuningCents !== 0 && (
             <span className="chip accent mono">Akort: {tuningCents > 0 ? `+${tuningCents}` : tuningCents}c</span>

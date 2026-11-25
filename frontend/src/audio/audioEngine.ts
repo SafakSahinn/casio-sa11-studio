@@ -27,7 +27,7 @@ export interface LiveFilterConfig {
 export function detectPitchYIN(
   buffer: Float32Array,
   sampleRate: number,
-  threshold = 0.14
+  threshold = 0.11
 ): { freq: number | null; confidence: number } {
   const halfLen = Math.floor(buffer.length / 2);
   // Wide range covering F2 (87 Hz) to C7 (2093 Hz) with margin
@@ -59,8 +59,31 @@ export function detectPitchYIN(
     }
   }
 
+  // Fallback: if nothing crossed strict threshold, check global min under 0.18
+  if (tauEstimate === -1) {
+    let bestVal = 0.18;
+    for (let tau = minTau; tau <= maxTau; tau++) {
+      if (yin[tau] < bestVal) {
+        bestVal = yin[tau];
+        tauEstimate = tau;
+      }
+    }
+  }
+
   if (tauEstimate === -1) {
     return { freq: null, confidence: 0 };
+  }
+
+  // Subharmonic check: prevent locking onto 2nd harmonic (1 octave too high)
+  const doubleTau = tauEstimate * 2;
+  if (doubleTau + 2 <= maxTau) {
+    let bestSub = doubleTau;
+    for (let t = Math.max(minTau, doubleTau - 2); t <= Math.min(maxTau, doubleTau + 2); t++) {
+      if (yin[t] < yin[bestSub]) bestSub = t;
+    }
+    if (yin[bestSub] < 0.18 && yin[bestSub] <= yin[tauEstimate] + 0.06) {
+      tauEstimate = bestSub;
+    }
   }
 
   // Parabolic interpolation for sub-sample accuracy
