@@ -244,23 +244,30 @@ export class SA11AudioEngine {
     // Branch 1: Raw input analyzer
     this.sourceNode.connect(this.rawAnalyser);
 
-    // Branch 2: Active Filter Chain -> Filtered Analyzer -> Recorder & Optional Monitor
-    let tail: AudioNode = this.sourceNode;
-
+    // Common clean input conditioning (50 Hz hum notch + 30 Hz DC block)
+    let cleanBus: AudioNode = this.sourceNode;
     if (this.filterConfig.enabled) {
-      // Optional 50 Hz mains hum notch
       if (this.filterConfig.notch50Hz) {
         const notch = this.ctx.createBiquadFilter();
         notch.type = 'notch';
         notch.frequency.value = 50;
         notch.Q.value = 25;
-        tail.connect(notch);
-        tail = notch;
+        cleanBus.connect(notch);
+        cleanBus = notch;
         this.filterNodes.push(notch);
       }
+      const dcBlock = this.ctx.createBiquadFilter();
+      dcBlock.type = 'highpass';
+      dcBlock.frequency.value = 30;
+      dcBlock.Q.value = 0.7071;
+      cleanBus.connect(dcBlock);
+      cleanBus = dcBlock;
+      this.filterNodes.push(dcBlock);
+    }
 
-      // Clean, sample-rate independent 2nd-order Butterworth HPF (80 Hz) + LPF (2200 Hz)
-      // Keeps fundamental pitch razor-sharp without IIR ringing or sample-rate mismatch
+    // Branch 2 (Pitch Detection ONLY): Band-limited 80–2200 Hz for clean fundamental tracking
+    let pitchTail: AudioNode = cleanBus;
+    if (this.filterConfig.enabled) {
       const hp = this.ctx.createBiquadFilter();
       hp.type = 'highpass';
       hp.frequency.value = 80;
@@ -269,25 +276,36 @@ export class SA11AudioEngine {
       lp.type = 'lowpass';
       lp.frequency.value = 2200;
       lp.Q.value = 0.7071;
-      tail.connect(hp);
+      pitchTail.connect(hp);
       hp.connect(lp);
-      tail = lp;
+      pitchTail = lp;
       this.filterNodes.push(hp, lp);
     }
+    pitchTail.connect(this.filteredAnalyser);
 
-    tail.connect(this.filteredAnalyser);
+    // Branch 3 (Monitor & Recording): Full-bandwidth crisp audio (up to 14 kHz, NOT muffled!)
+    let audioTail: AudioNode = cleanBus;
+    if (this.filterConfig.enabled) {
+      const antiAliasLp = this.ctx.createBiquadFilter();
+      antiAliasLp.type = 'lowpass';
+      antiAliasLp.frequency.value = 14000;
+      antiAliasLp.Q.value = 0.7071;
+      audioTail.connect(antiAliasLp);
+      audioTail = antiAliasLp;
+      this.filterNodes.push(antiAliasLp);
+    }
 
     // Connect recorder (silent sink to destination so ScriptProcessor runs)
-    tail.connect(this.recorderNode);
+    audioTail.connect(this.recorderNode);
     const silentGain = this.ctx.createGain();
     silentGain.gain.value = 0;
     this.recorderNode.connect(silentGain);
     silentGain.connect(this.ctx.destination);
     this.filterNodes.push(silentGain);
 
-    // Optional live monitoring
-    this.monitorGain.gain.value = this.filterConfig.monitorOutput ? 0.75 : 0.0;
-    tail.connect(this.monitorGain);
+    // Optional live monitoring (crisp full-range sound!)
+    this.monitorGain.gain.value = this.filterConfig.monitorOutput ? 0.85 : 0.0;
+    audioTail.connect(this.monitorGain);
     this.monitorGain.connect(this.ctx.destination);
   }
 
