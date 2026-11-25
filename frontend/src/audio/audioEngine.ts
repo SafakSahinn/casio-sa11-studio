@@ -74,42 +74,54 @@ export function detectKeySpectralComb(
   }
 
   const pitchScale = Math.pow(2, octaveShift) * Math.pow(2, tuningCents / 1200);
-  let bestScore = 0;
-  let secondScore = 0;
-  let bestKey: SA11Key | null = null;
-  let bestFreq = 0;
+  const m1Arr = new Float32Array(SA11_KEYS.length);
+  const scores = new Float32Array(SA11_KEYS.length);
 
   for (let k = 0; k < SA11_KEYS.length; k++) {
-    const keyObj = SA11_KEYS[k];
-    const f = keyObj.freq * pitchScale;
+    const f = SA11_KEYS[k].freq * pitchScale;
     if (f < 65 || f > sampleRate * 0.44) continue;
-
     const m1 = goertzelMag(xw, f, sampleRate);
     const m2 = 2 * f < sampleRate * 0.45 ? goertzelMag(xw, 2 * f, sampleRate) : 0;
     const m3 = 3 * f < sampleRate * 0.45 ? goertzelMag(xw, 3 * f, sampleRate) : 0;
+    m1Arr[k] = m1;
+    scores[k] = m1 + 0.55 * Math.min(m2, m1 * 2.2) + 0.25 * Math.min(m3, m1 * 1.8);
+  }
 
-    // Harmonic comb gated by fundamental energy m1 (prevents octave false-triggers)
-    const score = m1 + 0.55 * Math.min(m2, m1 * 1.6) + 0.30 * Math.min(m3, m1 * 1.4);
-
-    if (score > bestScore) {
+  let bestIdx = -1;
+  let bestScore = 0;
+  let secondScore = 0;
+  for (let k = 0; k < SA11_KEYS.length; k++) {
+    const s = scores[k];
+    if (s > bestScore) {
       secondScore = bestScore;
-      bestScore = score;
-      bestKey = keyObj;
-      bestFreq = f;
-    } else if (score > secondScore) {
-      secondScore = score;
+      bestScore = s;
+      bestIdx = k;
+    } else if (s > secondScore) {
+      secondScore = s;
     }
   }
 
-  // Normalize spectral prominence against overall windowed RMS
+  // Octave-below guard for 8-bit Casio SA-11 PCM:
+  // On low keys, the 2nd harmonic (2f) can be louder than the fundamental (f).
+  // If key (bestIdx - 12) has a genuine fundamental (>= 30% of bestIdx's m1), prefer the true lower fundamental!
+  if (bestIdx >= 12) {
+    const subIdx = bestIdx - 12;
+    if (m1Arr[subIdx] >= m1Arr[bestIdx] * 0.30 && m1Arr[subIdx] > winRms * 0.10) {
+      bestIdx = subIdx;
+      bestScore = scores[subIdx];
+    }
+  }
+
   const prominence = bestScore / (winRms + 1e-6);
   const separation = bestScore / (secondScore + 1e-6);
 
-  if (!bestKey || prominence < 0.22 || separation < 1.18) {
+  if (bestIdx === -1 || prominence < 0.18 || (bestIdx < 12 ? separation < 1.05 : separation < 1.10)) {
     return { key: null, freqHz: null, confidence: 0 };
   }
 
-  const confidence = Math.min(1, prominence * 1.1);
+  const bestKey = SA11_KEYS[bestIdx];
+  const bestFreq = bestKey.freq * pitchScale;
+  const confidence = Math.min(1, prominence * 1.15);
   return { key: bestKey, freqHz: bestFreq, confidence };
 }
 

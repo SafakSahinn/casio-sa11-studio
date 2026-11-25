@@ -4,7 +4,7 @@ import { EducationPanel } from './components/EducationPanel';
 import { RecordedTake, RecordStudioPanel } from './components/RecordStudioPanel';
 import { MusicMakerPanel } from './components/MusicMakerPanel';
 import { HardwareGuidePanel } from './components/HardwareGuidePanel';
-import { MUSIC_LESSONS, MusicLesson, SA11_KEYS, SA11_TONES, SA11Key } from './data/sa11Data';
+import { MUSIC_LESSONS, SA11_KEYS, SA11_TONES, SA11Key } from './data/sa11Data';
 import { audioEngine } from './audio/audioEngine';
 import { checkBackendHealth, requestFilterDesign } from './audio/dspClient';
 import {
@@ -50,11 +50,11 @@ export function App() {
   // Background Active Filter DSP backend status
   const [backendOnline, setBackendOnline] = useState(false);
 
-  // Education interactive practice state
-  const [activeLessonId, setActiveLessonId] = useState<string | null>(MUSIC_LESSONS[0].id);
-  const [customSequence, setCustomSequence] = useState<number[] | null>(null);
-  const [customExerciseLabel, setCustomExerciseLabel] = useState<string | null>(null);
-  const [lessonStepIndex, setLessonStepIndex] = useState<number>(0);
+  // Education interactive practice state (remembers progress per lesson / song / tone!)
+  const [activePracticeKey, setActivePracticeKey] = useState<string | null>(MUSIC_LESSONS[0].id);
+  const [activeSequence, setActiveSequence] = useState<number[] | null>(MUSIC_LESSONS[0].targetMidiSequence);
+  const [activePracticeLabel, setActivePracticeLabel] = useState<string | null>(MUSIC_LESSONS[0].title);
+  const [progressMap, setProgressMap] = useState<Record<string, number>>({});
 
   // Recorded takes shared between Record Studio & Music Maker
   const [takes, setTakes] = useState<RecordedTake[]>([]);
@@ -65,12 +65,7 @@ export function App() {
     [selectedToneCode]
   );
 
-  // Target sequence for Education mode
-  const activeSequence = useMemo(() => {
-    if (customSequence) return customSequence;
-    if (!activeLessonId) return null;
-    return MUSIC_LESSONS.find((l) => l.id === activeLessonId)?.targetMidiSequence ?? null;
-  }, [activeLessonId, customSequence]);
+  const lessonStepIndex = activePracticeKey ? (progressMap[activePracticeKey] ?? 0) : 0;
 
   const targetMidiNote =
     activeTab === 'education' && activeSequence && lessonStepIndex < activeSequence.length
@@ -176,28 +171,37 @@ export function App() {
     return () => window.clearInterval(timer);
   }, [isLineInConnected, octaveShift, tuningCents, isCalibrating]);
 
-  // Advance Education exercise automatically when user hits the target note (via real SA-11 OR 3D click!)
-  const combinedActiveMidis = useMemo(() => {
+  // User-played notes ONLY (real SA-11 + mouse/PC clicks) — preview playback must NOT auto-complete lessons!
+  const userPlayedMidis = useMemo(() => {
     const set = new Set<number>(virtualMidiNotes);
     if (detectedMidi !== null) set.add(detectedMidi);
+    return Array.from(set);
+  }, [virtualMidiNotes, detectedMidi]);
+
+  // Visual 3D keys include both user-played notes AND preview/sequencer notes
+  const combinedActiveMidis = useMemo(() => {
+    const set = new Set<number>(userPlayedMidis);
     if (seqMidiNote !== null) set.add(seqMidiNote);
     return Array.from(set);
-  }, [virtualMidiNotes, detectedMidi, seqMidiNote]);
+  }, [userPlayedMidis, seqMidiNote]);
 
   useEffect(() => {
-    if (targetMidiNote === null) {
+    if (targetMidiNote === null || !activePracticeKey) {
       lastMatchedNoteRef.current = null;
       return;
     }
-    if (combinedActiveMidis.includes(targetMidiNote)) {
+    if (userPlayedMidis.includes(targetMidiNote)) {
       if (lastMatchedNoteRef.current !== targetMidiNote) {
         lastMatchedNoteRef.current = targetMidiNote;
-        setLessonStepIndex((prev) => prev + 1);
+        setProgressMap((prev) => ({
+          ...prev,
+          [activePracticeKey]: (prev[activePracticeKey] ?? 0) + 1,
+        }));
       }
-    } else if (lastMatchedNoteRef.current !== null && !combinedActiveMidis.includes(lastMatchedNoteRef.current)) {
+    } else if (lastMatchedNoteRef.current !== null && !userPlayedMidis.includes(lastMatchedNoteRef.current)) {
       lastMatchedNoteRef.current = null;
     }
-  }, [combinedActiveMidis, targetMidiNote]);
+  }, [userPlayedMidis, targetMidiNote, activePracticeKey]);
 
   // PC Keyboard shortcuts for quick testing (A-S-D-F-G-H-J-K etc.)
   useEffect(() => {
@@ -431,24 +435,28 @@ export function App() {
             <EducationPanel
               selectedToneCode={selectedToneCode}
               onSelectTone={setSelectedToneCode}
-              activeLessonId={activeLessonId}
+              activePracticeKey={activePracticeKey}
               lessonStepIndex={lessonStepIndex}
-              customExerciseLabel={customExerciseLabel}
-              customSequence={customSequence}
-              onStartLesson={(lesson: MusicLesson | null, customSeq?: number[], label?: string) => {
-                if (customSeq) {
-                  setCustomSequence(customSeq);
-                  setCustomExerciseLabel(label ?? 'Ton Etüdü');
-                  setActiveLessonId(null);
-                } else if (lesson) {
-                  setCustomSequence(null);
-                  setCustomExerciseLabel(null);
-                  setActiveLessonId(lesson.id);
-                  setSelectedToneCode(lesson.recommendedToneCode);
-                }
-                setLessonStepIndex(0);
+              progressMap={progressMap}
+              activePracticeLabel={activePracticeLabel}
+              activeSequence={activeSequence}
+              onStartLesson={(practiceKey, sequence, label, toneCode, restart = false) => {
+                setActivePracticeKey(practiceKey);
+                setActiveSequence(sequence);
+                setActivePracticeLabel(label);
+                if (toneCode) setSelectedToneCode(toneCode);
+                lastMatchedNoteRef.current = null;
+                setProgressMap((prev) => {
+                  const existing = prev[practiceKey] ?? 0;
+                  const nextVal = restart || existing >= sequence.length ? 0 : existing;
+                  return { ...prev, [practiceKey]: nextVal };
+                });
               }}
-              onResetLessonStep={() => setLessonStepIndex(0)}
+              onResetLessonStep={() => {
+                if (!activePracticeKey) return;
+                lastMatchedNoteRef.current = null;
+                setProgressMap((prev) => ({ ...prev, [activePracticeKey]: 0 }));
+              }}
               onPreviewNote={(midi) => setSeqMidiNote(midi)}
             />
           )}
