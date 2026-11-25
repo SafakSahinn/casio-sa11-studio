@@ -120,7 +120,7 @@ export const HardwareGuidePanel: React.FC<HardwareGuidePanelProps> = ({
               </div>
               <div style={{ display: 'flex', gap: 7, alignItems: 'flex-start' }}>
                 <CheckCircle2 size={15} color="var(--ok)" style={{ flexShrink: 0, marginTop: 2 }} />
-                <span><strong>Ses Geliştirmeleri (Audio Enhancements):</strong> KAPALI yapın; filtrelemeyi kendi Python Aktif Filtre Laboratuvarımız yapacak.</span>
+                <span><strong>Ses Geliştirmeleri (Audio Enhancements):</strong> KAPALI yapın; gürültü ve 50 Hz filtrelemesini uygulama arka planda otomatik yapar.</span>
               </div>
               <div style={{ display: 'flex', gap: 7, alignItems: 'flex-start' }}>
                 <CheckCircle2 size={15} color="var(--ok)" style={{ flexShrink: 0, marginTop: 2 }} />
