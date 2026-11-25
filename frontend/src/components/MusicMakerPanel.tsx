@@ -1,8 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { SA11_KEYS, SA11_TONES } from '../data/sa11Data';
-import { audioEngine } from '../audio/audioEngine';
+import { midiToFreq, SA11_KEYS, SA11_TONES } from '../data/sa11Data';
+import { audioEngine, encodeWavPCM16 } from '../audio/audioEngine';
 import { RecordedTake } from './RecordStudioPanel';
-import { Disc3, Play, Plus, Square, Trash2 } from 'lucide-react';
+import { Disc3, Download, Play, Plus, Square, Trash2 } from 'lucide-react';
 
 interface MusicMakerPanelProps {
   selectedToneCode: string;
@@ -43,6 +43,7 @@ export const MusicMakerPanel: React.FC<MusicMakerPanelProps> = ({
   const [drums, setDrums] = useState<Record<DrumRow, boolean[]>>(DEFAULT_DRUMS);
   const [melody, setMelody] = useState<Array<number | null>>(DEFAULT_MELODY);
   const [liveCaptureStep, setLiveCaptureStep] = useState<number | null>(null);
+  const [exporting, setExporting] = useState(false);
 
   const stepRef = useRef(0);
   const drumsRef = useRef(drums);
@@ -77,14 +78,12 @@ export const MusicMakerPanel: React.FC<MusicMakerPanelProps> = ({
       const s = stepRef.current;
       setCurrentStep(s);
 
-      // Trigger drums
       for (const row of DRUM_ROWS) {
         if (drumsRef.current[row.id][s]) {
           audioEngine.playDrumHit(row.id);
         }
       }
 
-      // Trigger melody note & flash 3D key
       const midi = melodyRef.current[s];
       if (midi !== null) {
         const tone = SA11_TONES.find((t) => t.code === toneRef.current) ?? SA11_TONES[0];
@@ -133,6 +132,118 @@ export const MusicMakerPanel: React.FC<MusicMakerPanelProps> = ({
     }
   };
 
+  const handleExportWav = async () => {
+    setExporting(true);
+    try {
+      const sr = 44100;
+      const stepSec = 60 / bpm / 4;
+      const loops = 2; // 2 full bars (32 steps)
+      const totalSec = stepSec * 16 * loops + 0.6;
+      const offline = new OfflineAudioContext(1, Math.ceil(sr * totalSec), sr);
+
+      const nBuf = offline.createBuffer(1, Math.floor(sr * 0.2), sr);
+      const nData = nBuf.getChannelData(0);
+      for (let i = 0; i < nData.length; i++) nData[i] = Math.random() * 2 - 1;
+
+      const tone = SA11_TONES.find((t) => t.code === selectedToneCode) ?? SA11_TONES[0];
+
+      for (let loop = 0; loop < loops; loop++) {
+        for (let s = 0; s < 16; s++) {
+          const t0 = (loop * 16 + s) * stepSec;
+
+          if (drums.kick[s]) {
+            const o = offline.createOscillator();
+            const g = offline.createGain();
+            o.frequency.setValueAtTime(145, t0);
+            o.frequency.exponentialRampToValueAtTime(42, t0 + 0.12);
+            g.gain.setValueAtTime(0.45, t0);
+            g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.18);
+            o.connect(g);
+            g.connect(offline.destination);
+            o.start(t0);
+            o.stop(t0 + 0.2);
+          }
+          if (drums.snare[s] || drums.clap[s]) {
+            const src = offline.createBufferSource();
+            src.buffer = nBuf;
+            const bp = offline.createBiquadFilter();
+            bp.type = 'bandpass';
+            bp.frequency.value = drums.snare[s] ? 1800 : 1200;
+            const g = offline.createGain();
+            g.gain.setValueAtTime(0.28, t0);
+            g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.12);
+            src.connect(bp);
+            bp.connect(g);
+            g.connect(offline.destination);
+            src.start(t0);
+            src.stop(t0 + 0.13);
+          }
+          if (drums.hihat[s]) {
+            const src = offline.createBufferSource();
+            src.buffer = nBuf;
+            const hp = offline.createBiquadFilter();
+            hp.type = 'highpass';
+            hp.frequency.value = 7500;
+            const g = offline.createGain();
+            g.gain.setValueAtTime(0.16, t0);
+            g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.045);
+            src.connect(hp);
+            hp.connect(g);
+            g.connect(offline.destination);
+            src.start(t0);
+            src.stop(t0 + 0.05);
+          }
+
+          const midi = melody[s];
+          if (midi !== null) {
+            const freq = midiToFreq(midi);
+            const dur = Math.max(0.14, stepSec * 0.9);
+            const o1 = offline.createOscillator();
+            const o2 = offline.createOscillator();
+            const lp = offline.createBiquadFilter();
+            const g = offline.createGain();
+            const g2 = offline.createGain();
+
+            o1.type = tone.synthWave === 'square' ? 'square' : 'triangle';
+            o2.type = 'sine';
+            o1.frequency.setValueAtTime(freq, t0);
+            o2.frequency.setValueAtTime(freq * 2, t0);
+
+            lp.type = 'lowpass';
+            lp.frequency.setValueAtTime(Math.min(6000, freq * 8), t0);
+            lp.frequency.exponentialRampToValueAtTime(Math.max(600, freq * 2), t0 + dur);
+            g2.gain.value = 0.25;
+
+            g.gain.setValueAtTime(0.0001, t0);
+            g.gain.linearRampToValueAtTime(0.32, t0 + 0.008);
+            g.gain.exponentialRampToValueAtTime(0.001, t0 + dur + 0.08);
+
+            o1.connect(lp);
+            o2.connect(g2);
+            g2.connect(lp);
+            lp.connect(g);
+            g.connect(offline.destination);
+            o1.start(t0);
+            o2.start(t0);
+            o1.stop(t0 + dur + 0.1);
+            o2.stop(t0 + dur + 0.1);
+          }
+        }
+      }
+
+      const rendered = await offline.startRendering();
+      const wavBlob = encodeWavPCM16([rendered.getChannelData(0)], sr);
+      const url = URL.createObjectURL(wavBlob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `SA11_Beste_${bpm}BPM.wav`;
+      a.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 4000);
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       {/* Transport Bar */}
@@ -165,6 +276,13 @@ export const MusicMakerPanel: React.FC<MusicMakerPanelProps> = ({
           <button className="btn btn-sm" onClick={() => applyRhythmPreset('rock')}>SA-11 Rock</button>
           <button className="btn btn-sm" onClick={() => applyRhythmPreset('disco')}>SA-11 Disco</button>
           <button className="btn btn-sm" onClick={() => applyRhythmPreset('bossa')}>SA-11 Bossa Nova</button>
+          <button
+            className="btn btn-sm btn-primary"
+            disabled={exporting}
+            onClick={() => void handleExportWav()}
+          >
+            <Download size={13} /> {exporting ? 'Hazırlanıyor...' : 'WAV İndir'}
+          </button>
           <button
             className={`btn btn-sm ${liveCaptureStep !== null ? 'btn-danger' : 'btn-ok'}`}
             onClick={() => setLiveCaptureStep(liveCaptureStep !== null ? null : 0)}
@@ -264,7 +382,7 @@ export const MusicMakerPanel: React.FC<MusicMakerPanelProps> = ({
         </div>
         {takes.length === 0 ? (
           <div style={{ fontSize: 13, color: 'var(--muted)' }}>
-            Kayıt Stüdyosu sekmesinde kaydettiğiniz ve Python Aktif Filtre ile temizlediğiniz klipler burada düzenleme ve eşlik için otomatik listelenir.
+            Kayıt Stüdyosu sekmesinde kaydettiğiniz ve aktif filtre ile temizlediğiniz klipler burada düzenleme ve eşlik için otomatik listelenir.
           </div>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 10 }}>

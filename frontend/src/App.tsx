@@ -20,11 +20,32 @@ import {
 
 type ActiveTab = 'education' | 'record' | 'maker' | 'hardware';
 
+const STORAGE_KEY = 'sa11_studio_state_v1';
+
+interface SavedState {
+  progressMap?: Record<string, number>;
+  octaveShift?: number;
+  tuningCents?: number;
+  selectedToneCode?: string;
+  showKeyLabels?: boolean;
+}
+
+function loadSavedState(): SavedState {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw ? (JSON.parse(raw) as SavedState) : {};
+  } catch {
+    return {};
+  }
+}
+
 export function App() {
+  const initial = useMemo(() => loadSavedState(), []);
   const [activeTab, setActiveTab] = useState<ActiveTab>('education');
-  const [selectedToneCode, setSelectedToneCode] = useState<string>('00');
-  const [octaveShift, setOctaveShift] = useState<number>(0);
-  const [tuningCents, setTuningCents] = useState<number>(0);
+  const [selectedToneCode, setSelectedToneCode] = useState<string>(initial.selectedToneCode ?? '00');
+  const [octaveShift, setOctaveShift] = useState<number>(initial.octaveShift ?? 0);
+  const [tuningCents, setTuningCents] = useState<number>(initial.tuningCents ?? 0);
+  const [showKeyLabels, setShowKeyLabels] = useState<boolean>(initial.showKeyLabels ?? true);
   const [isCalibrating, setIsCalibrating] = useState<boolean>(false);
   const [calibrationProgress, setCalibrationProgress] = useState<number>(0);
   const calibSamplesRef = useRef<number[]>([]);
@@ -54,7 +75,23 @@ export function App() {
   const [activePracticeKey, setActivePracticeKey] = useState<string | null>(MUSIC_LESSONS[0].id);
   const [activeSequence, setActiveSequence] = useState<number[] | null>(MUSIC_LESSONS[0].targetMidiSequence);
   const [activePracticeLabel, setActivePracticeLabel] = useState<string | null>(MUSIC_LESSONS[0].title);
-  const [progressMap, setProgressMap] = useState<Record<string, number>>({});
+  const [progressMap, setProgressMap] = useState<Record<string, number>>(initial.progressMap ?? {});
+
+  // Persist user progress, calibration & preferences in localStorage
+  useEffect(() => {
+    try {
+      const payload: SavedState = {
+        progressMap,
+        octaveShift,
+        tuningCents,
+        selectedToneCode,
+        showKeyLabels,
+      };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+    } catch {
+      // Ignore storage quota / private mode errors
+    }
+  }, [progressMap, octaveShift, tuningCents, selectedToneCode, showKeyLabels]);
 
   // Recorded takes shared between Record Studio & Music Maker
   const [takes, setTakes] = useState<RecordedTake[]>([]);
@@ -417,6 +454,8 @@ export function App() {
             tuningCents={tuningCents}
             isCalibrating={isCalibrating}
             calibrationProgress={calibrationProgress}
+            showKeyLabels={showKeyLabels}
+            onToggleKeyLabels={() => setShowKeyLabels((v) => !v)}
             onOctaveShiftChange={(s) => {
               setOctaveShift(s);
               setTuningCents(0);

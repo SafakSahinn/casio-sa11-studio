@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { SA11_KEYS, SA11_TONES, SA11Key } from '../data/sa11Data';
-import { Crosshair, Eye, RotateCcw, Volume2 } from 'lucide-react';
+import { Crosshair, Eye, RotateCcw, Tag, Volume2 } from 'lucide-react';
 
 interface CasioSA11_3DProps {
   activeMidiNotes: number[];       // Notes currently pressed (real keyboard audio OR virtual click) -> RED!
@@ -16,6 +16,8 @@ interface CasioSA11_3DProps {
   tuningCents: number;
   isCalibrating: boolean;
   calibrationProgress: number;
+  showKeyLabels: boolean;
+  onToggleKeyLabels: () => void;
   onOctaveShiftChange: (shift: number) => void;
   onStartCalibration: () => void;
   onVirtualKeyPress: (key: SA11Key) => void;
@@ -116,6 +118,34 @@ function createTopPanelTexture(selectedToneCode: string): THREE.CanvasTexture {
   return tex;
 }
 
+function createKeyLabelTexture(note: string, solfege: string): THREE.CanvasTexture {
+  const canvas = document.createElement('canvas');
+  canvas.width = 128;
+  canvas.height = 160;
+  const ctx = canvas.getContext('2d')!;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // Subtle pill backdrop
+  ctx.fillStyle = 'rgba(255,255,255,0.85)';
+  ctx.fillRect(8, 16, 112, 128);
+
+  // Solfege (Do, Re, Mi...)
+  ctx.fillStyle = '#191919';
+  ctx.font = '800 44px Inter, Arial, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText(solfege.replace(/\d/, ''), 64, 72);
+
+  // Note name (C4, D4...)
+  ctx.fillStyle = '#3d5afe';
+  ctx.font = '700 32px JetBrains Mono, monospace';
+  ctx.fillText(note, 64, 120);
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.anisotropy = 4;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
 export const CasioSA11_3D: React.FC<CasioSA11_3DProps> = ({
   activeMidiNotes,
   targetMidiNote = null,
@@ -128,6 +158,8 @@ export const CasioSA11_3D: React.FC<CasioSA11_3DProps> = ({
   tuningCents,
   isCalibrating,
   calibrationProgress,
+  showKeyLabels,
+  onToggleKeyLabels,
   onOctaveShiftChange,
   onStartCalibration,
   onVirtualKeyPress,
@@ -140,6 +172,7 @@ export const CasioSA11_3D: React.FC<CasioSA11_3DProps> = ({
     material: THREE.MeshStandardMaterial;
     isBlack: boolean;
   }>>(new Map());
+  const labelMeshesRef = useRef<THREE.Mesh[]>([]);
   const panelMatRef = useRef<THREE.MeshStandardMaterial | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
   const controlsRef = useRef<OrbitControls | null>(null);
@@ -159,6 +192,13 @@ export const CasioSA11_3D: React.FC<CasioSA11_3DProps> = ({
   useEffect(() => {
     targetNoteRef.current = targetMidiNote ?? null;
   }, [targetMidiNote]);
+
+  // Toggle 3D key note labels visibility instantly
+  useEffect(() => {
+    for (const lbl of labelMeshesRef.current) {
+      lbl.visible = showKeyLabels;
+    }
+  }, [showKeyLabels]);
 
   // Update top panel printed texture when selectedToneCode changes
   useEffect(() => {
@@ -397,6 +437,7 @@ export const CasioSA11_3D: React.FC<CasioSA11_3DProps> = ({
     }>();
 
     const clickableMeshes: THREE.Mesh[] = [];
+    const createdLabels: THREE.Mesh[] = [];
 
     for (const k of SA11_KEYS) {
       const pivot = new THREE.Group();
@@ -416,6 +457,17 @@ export const CasioSA11_3D: React.FC<CasioSA11_3DProps> = ({
         mesh.receiveShadow = true;
         mesh.userData = { midi: k.midi };
         pivot.add(mesh);
+
+        // Optional Note & Solfege label decal on front top of white key
+        const lblTex = createKeyLabelTexture(k.note, k.solfege);
+        const lblMat = new THREE.MeshBasicMaterial({ map: lblTex, transparent: true });
+        const lblMesh = new THREE.Mesh(new THREE.PlaneGeometry(whiteW * 0.84, 0.19), lblMat);
+        lblMesh.rotation.x = -Math.PI / 2;
+        lblMesh.position.set(0, whiteH / 2 + 0.002, whiteD - 0.125);
+        lblMesh.visible = showKeyLabels;
+        pivot.add(lblMesh);
+        createdLabels.push(lblMesh);
+
         keyboardGroup.add(pivot);
         keyMap.set(k.midi, { pivot, mesh, material: mat, isBlack: false });
         clickableMeshes.push(mesh);
@@ -443,6 +495,7 @@ export const CasioSA11_3D: React.FC<CasioSA11_3DProps> = ({
     }
 
     keyMeshesRef.current = keyMap;
+    labelMeshesRef.current = createdLabels;
 
     // Raycasting for clicking 3D keys
     const raycaster = new THREE.Raycaster();
@@ -599,7 +652,14 @@ export const CasioSA11_3D: React.FC<CasioSA11_3DProps> = ({
           </span>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+          <button
+            className={`btn btn-sm ${showKeyLabels ? 'btn-primary' : ''}`}
+            onClick={onToggleKeyLabels}
+            title="3D tuşların üstündeki Do-Re-Mi / C-D-E nota etiketlerini aç/kapa"
+          >
+            <Tag size={13} /> Nota İsimleri
+          </button>
           <button
             className={`btn btn-sm ${camPreset === 'iso' ? 'btn-primary' : ''}`}
             onClick={() => applyCameraPreset('iso')}
