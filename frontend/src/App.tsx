@@ -124,7 +124,7 @@ export function App() {
       return;
     }
     const timer = window.setInterval(() => {
-      const reading = audioEngine.analyzeLivePitch(octaveShift, tuningCents);
+      const reading = audioEngine.analyzeLivePitch(octaveShift, tuningCents, isCalibrating);
       const pct = Math.max(0, Math.min(100, ((reading.rmsDb + 60) / 60) * 100));
       setRmsLevelPct(pct);
 
@@ -132,7 +132,6 @@ export function App() {
       if (isCalibrating) {
         if (reading.freqHz && reading.confidence >= 0.85) {
           const buf = calibSamplesRef.current;
-          // Reject sudden octave/transient jump vs previous sample
           if (buf.length > 0 && Math.abs(reading.freqHz - buf[buf.length - 1]) / buf[buf.length - 1] > 0.04) {
             calibSamplesRef.current = [reading.freqHz];
           } else {
@@ -164,30 +163,15 @@ export function App() {
         return;
       }
 
-      if (reading.key && reading.freqHz && reading.confidence >= 0.8) {
-        // Require 2 consecutive matching frames to eliminate single-frame transient flickers
-        if (stablePitchRef.current.midi === reading.key.midi) {
-          stablePitchRef.current.count += 1;
-        } else {
-          stablePitchRef.current = { midi: reading.key.midi, count: 1 };
-        }
-        if (stablePitchRef.current.count >= 2) {
-          setDetectedMidi(reading.key.midi);
-          setDetectedNoteLabel(`${reading.key.note} (${reading.key.solfege.replace(/\d/, '')})`);
-          setDetectedFreqHz(reading.freqHz);
-          setDetectedCents(reading.cents);
-        }
-      } else if (reading.freqHz && reading.confidence >= 0.8) {
-        stablePitchRef.current = { midi: null, count: 0 };
-        setDetectedMidi(null);
-        setDetectedNoteLabel('Aralık Dışı');
+      if (reading.key && reading.freqHz) {
+        setDetectedMidi(reading.key.midi);
+        setDetectedNoteLabel(`${reading.key.note} (${reading.key.solfege.replace(/\d/, '')})`);
         setDetectedFreqHz(reading.freqHz);
-        setDetectedCents(null);
+        setDetectedCents(reading.cents);
       } else {
-        stablePitchRef.current = { midi: null, count: 0 };
         setDetectedMidi(null);
       }
-    }, 33);
+    }, 25);
 
     return () => window.clearInterval(timer);
   }, [isLineInConnected, octaveShift, tuningCents, isCalibrating]);
