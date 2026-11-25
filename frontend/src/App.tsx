@@ -45,7 +45,7 @@ export function App() {
   const [selectedToneCode, setSelectedToneCode] = useState<string>(initial.selectedToneCode ?? '00');
   const [octaveShift, setOctaveShift] = useState<number>(initial.octaveShift ?? 0);
   const [tuningCents, setTuningCents] = useState<number>(initial.tuningCents ?? 0);
-  const [showKeyLabels, setShowKeyLabels] = useState<boolean>(initial.showKeyLabels ?? true);
+  const [showKeyLabels, setShowKeyLabels] = useState<boolean>(initial.showKeyLabels ?? false);
   const [isCalibrating, setIsCalibrating] = useState<boolean>(false);
   const [calibrationProgress, setCalibrationProgress] = useState<number>(0);
   const calibSamplesRef = useRef<number[]>([]);
